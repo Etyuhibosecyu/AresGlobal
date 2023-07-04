@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
-namespace AresGlobalMethods;
+namespace AresGlobalMethods005;
 
 [DebuggerDisplay("Length = {Length}")]
 public class ArithmeticEncoder : IDisposable

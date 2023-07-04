@@ -40,7 +40,7 @@ public static unsafe class Global
 		CS8 = 1 << 20,
 		AHF = 1 << 21,
 	}
-	public const byte ProgramVersion = 1;
+	public const byte ProgramVersion = 2;
 	public const int MillisecondsPerSecond = 1000;
 	public const int ProgressBarStep = 10;
 	public const int BitsPerByte = 8;

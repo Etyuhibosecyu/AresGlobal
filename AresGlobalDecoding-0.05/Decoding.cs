@@ -10,10 +10,12 @@ global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
 
-namespace AresGlobalMethods;
+namespace AresGlobalMethods005;
 
 public class Decoding
 {
+	internal const byte ProgramVersion = 1;
+
 	public static List<ShortIntervalList> DecodeLempelZiv(List<ShortIntervalList> compressedList, bool lz, int lzRDist, uint lzThresholdDist, int lzRLength, uint lzThresholdLength, uint lzUseSpiralLengths, int lzRSpiralLength, uint lzThresholdSpiralLength, int tn)
 	{
 		List<ShortIntervalList> result = new();
