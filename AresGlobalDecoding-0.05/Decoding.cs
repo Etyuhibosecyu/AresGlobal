@@ -144,17 +144,17 @@ public class Decoding
 		for (var i = 0; i < byteList.Length - 2;)
 		{
 			temp = byteList[i++];
-			if (temp >= 128)
+			if (temp >= ValuesInByte >> 1)
 				serie = 2;
 			else
 				serie = 1;
-			if (temp % 128 != 127)
-				length = temp % 128 + 1;
+			if (temp % (ValuesInByte >> 1) != (ValuesInByte >> 1) - 1)
+				length = temp % (ValuesInByte >> 1) + 1;
 			else
 			{
 				if (i >= byteList.Length - 1)
 					break;
-				length = byteList[i++] * ValuesInByte + byteList[i++] + 128;
+				length = (byteList[i++] << BitsPerByte) + byteList[i++] + (ValuesInByte >> 1);
 			}
 			if (i >= byteList.Length - 2)
 				break;
@@ -187,17 +187,17 @@ public class Decoding
 		for (var i = 0; i < byteList.Length;)
 		{
 			temp = byteList[i++];
-			if (temp >= 128)
+			if (temp >= ValuesInByte >> 1)
 				serie = 2;
 			else
 				serie = 1;
-			if (temp % 128 != 127)
-				length = temp % 128 + 1;
+			if (temp % (ValuesInByte >> 1) != (ValuesInByte >> 1) - 1)
+				length = temp % (ValuesInByte >> 1) + 1;
 			else
 			{
 				if (i >= byteList.Length - 1)
 					break;
-				length = byteList[i++] * ValuesInByte + byteList[i++] + 128;
+				length = (byteList[i++] << BitsPerByte) + byteList[i++] + (ValuesInByte >> 1);
 			}
 			if (i >= byteList.Length)
 				break;

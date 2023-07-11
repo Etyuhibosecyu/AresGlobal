@@ -37,6 +37,8 @@ public readonly struct Interval : IEquatable<Interval>
 	{
 	}
 
+	public static Interval Default => new(0, 1);
+
 	public override bool Equals(object? obj)
 	{
 		if (obj == null)

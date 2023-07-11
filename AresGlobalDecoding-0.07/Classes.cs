@@ -576,7 +576,7 @@ public class ArchaicHuffmanNode : G.IEnumerable<uint>
 	public G.IEnumerator<uint> GetEnumerator()
 	{
 		Stack<ArchaicHuffmanNode> stack = new();
-		ArchaicHuffmanNode? current = this;
+		var current = this;
 		while (current != null)
 		{
 			stack.Push(current);
