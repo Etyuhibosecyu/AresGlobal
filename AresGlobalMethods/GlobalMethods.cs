@@ -182,7 +182,7 @@ public class LempelZiv
 {
 	private readonly List<ShortIntervalList> input, result;
 	private readonly int tn, huffmanIndex;
-	private readonly bool huffman, pixels, cout, spaces;
+	private readonly bool huffman, pixels, lw, cout, spaces;
 	private const int LZDictionarySize = 32767;
 
 	public LempelZiv(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn, bool cout = false)
@@ -192,6 +192,7 @@ public class LempelZiv
 		huffmanIndex = input[0].IndexOf(HuffmanApplied);
 		huffman = huffmanIndex != -1;
 		pixels = input[0].Length >= 1 && input[0][0] == PixelsApplied;
+		lw = input[0].Length >= 2 && input[0][1] == LWApplied;
 		spaces = input[0].Length >= 2 && input[0][1] == SpacesApplied;
 		this.tn = tn;
 		this.cout = cout;
@@ -209,7 +210,13 @@ public class LempelZiv
 
 	private List<ShortIntervalList> EncodeInts(int lzStart, bool huffman = false, bool pixels = false)
 	{
-		var (preIndexCodes, secondaryCodes) = input.AsSpan(lzStart - 2).NBreak((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
+		var (preIndexCodes, secondaryCodes) = huffman && lw ? input.AsSpan(lzStart - 2).RepresentIntoNumbers((x, y) => RedStarLinq.Equals(x, y), x => x.Length switch
+		{
+			0 => 1234567890,
+			1 => x[0].GetHashCode(),
+			2 => x[0].GetHashCode() << 9 ^ x[1].GetHashCode(),
+			_ => (x[0].GetHashCode() << 9 ^ x[1].GetHashCode()) << 9 ^ x[^1].GetHashCode(),
+		}).NBreak(x => ((uint)x, 0u)) : input.AsSpan(lzStart - 2).NBreak((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
 		var secondaryCodesActive = secondaryCodes.Any(x => x is not 0);
 		Current[tn] = 0;
 		CurrentMaximum[tn] = ProgressBarStep * 2;
@@ -349,20 +356,11 @@ public class LempelZiv
 				var ub = preIndexCodes.Length - iIC - 1;
 				if (matches.Length == 0 || ub < startK)
 					continue;
-				var lastMatch = (int)matches[^1];
 				var k = startK;
-				for (; k <= ub && matches.Length > 1; k++)
-				{
-					lastMatch = (int)matches[^1];
-					matches.FilterInPlace(jIC => preIndexCodes[iIC + k] == preIndexCodes[(int)(jIC + k)]);
-					if (k == ub || matches.Length == 0 || iIC - matches[^1] >= (iIC - lastMatch) << 3 && lastMatch - matches[^1] >= 64) break;
-				}
-				if (matches.Length == 1)
-				{
-					lastMatch = (int)matches[^1];
-					var ub2 = Min(ub, (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
-					for (; k <= ub2 && preIndexCodes[iIC + k] == preIndexCodes[lastMatch + k]; k++) ;
-				}
+				var compareResults = matches.ToArray((jIC, index) => preIndexCodes.Compare(iIC + k, preIndexCodes, (int)(jIC + k), ub - k));
+				var lastMatchIndex = compareResults.IndexOfMax();
+				var lastMatch = (int)matches[lastMatchIndex];
+				k += compareResults[lastMatchIndex];
 				if (input.AsSpan(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
@@ -451,7 +449,17 @@ public class LempelZiv
 				c.Add(new(thresholdSpiralLength, (uint)maxSpiralLength + 1));
 		}
 #if DEBUG
-		if (!RedStarLinq.Equals(DecodeLempelZiv(result.Skip(lzStart - 2), true, rDist, thresholdDist, rLength, thresholdLength, useSpiralLengths, rSpiralLength, thresholdSpiralLength, tn), input.Skip(lzStart - 2), (x, y) => RedStarLinq.Equals(x, y, (x, y) => x.Equals(y) || x.Base == GetBaseWithBuffer(y.Base) && x.Lower == y.Lower && x.Length == y.Length)))
+		var input2 = input.Skip(lzStart - 2);
+		var decoded = DecodeLempelZiv(result.Skip(lzStart - 2), true, rDist, thresholdDist, rLength, thresholdLength, useSpiralLengths, rSpiralLength, thresholdSpiralLength, tn);
+		for (var i = 0; i < input2.Length && i < decoded.Length; i++)
+			for (var j = 0; j < input2[i].Length && j < decoded[i].Length; j++)
+			{
+				var x = input2[i][j];
+				var y = decoded[i][j];
+				if (!(x.Equals(y) || GetBaseWithBuffer(x.Base) == y.Base && x.Lower == y.Lower && x.Length == y.Length))
+					throw new DecoderFallbackException();
+			}
+		if (input2.Length != decoded.Length)
 			throw new DecoderFallbackException();
 #endif
 		if (c.Length > 8)
@@ -492,8 +500,17 @@ public class LempelZiv
 			var oldBase = input[iStart][0].Base;
 			var newBase = GetBaseWithBuffer(oldBase);
 			statesNumLog1 = 0;
-			if (elementsReplaced.IndexOf(true, iStart, Min((int)localMaxLength + 3, elementsReplaced.Length - iStart)) != -1)
-				continue;
+			if (CreateVar(elementsReplaced.IndexOf(true, iStart, Min((int)localMaxLength + 3, elementsReplaced.Length - iStart)), out var replacedIndex) != -1)
+			{
+				if (iSpiralLength == 0 && replacedIndex >= iStart + 3)
+				{
+					iDist -= (uint)(replacedIndex - iStart - 3 - iLength);
+					localMaxLength = iLength = (uint)(replacedIndex - iStart - 3);
+					if (iDist > ToUInt(maxDist, type)) continue;
+				}
+				else
+					continue;
+			}
 			for (var k = iStart; k <= iStart + localMaxLength + 1; k++)
 				statesNumLog1 += input[k].Sum(x => Log(x.Base) - Log(x.Length));
 			statesNumLog2 = Log(newBase) - Log(newBase - oldBase);
@@ -598,7 +615,7 @@ public class LempelZiv
 	private List<ShortIntervalList> LempelZivDummy(List<ShortIntervalList> input)
 	{
 		result.Replace(input);
-		result[0].Add(LempelZivDummyApplied);
+		result[0] = new(result[0]) { LempelZivDummyApplied };
 		List<Interval> list = new() { new(0, 3) };
 		list.WriteCount(0, 16);
 		list.Add(new(0, 3));

@@ -39,6 +39,7 @@ public static unsafe class Global
 	public static Interval WordsApplied { get; } = new(0, 14, 14);
 	public static Interval LengthsApplied { get; } = new(0, 15, 15);
 	public static Interval BWTApplied { get; } = new(0, 16, 16);
+	public static Interval LWApplied { get; } = new(0, 17, 17);
 	public static Interval RepeatsApplied { get; } = new(224, 225);
 	public static Interval RepeatsNotApplied { get; } = new(0, 224, 225);
 	public static Interval LempelZivSubdivided { get; } = new(0, 20, 20);
