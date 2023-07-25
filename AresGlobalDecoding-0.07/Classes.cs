@@ -291,6 +291,20 @@ public class ArithmeticDecoder : IDisposable
 		return c;
 	}
 
+	public int ReadPart(SumList sl)
+	{
+		uint ol = l, oh = h, divisor = (uint)sl.ValuesSum;
+		if (divisor == 0)
+			return 0;
+		var freq = (uint)((((ulong)value - ol + 1) * divisor - 1) / ((ulong)oh - ol + 1));
+		var c = sl.IndexOfNotGreaterSum(freq);
+		var leftSum = (uint)sl.GetLeftValuesSum(c, out var frequency);
+		l = (uint)(ol + leftSum * ((ulong)oh - ol + 1) / divisor);
+		h = (uint)(ol + (uint)(leftSum + frequency) * ((ulong)oh - ol + 1) / divisor - 1);
+		ReadInternal();
+		return c;
+	}
+
 	public bool ReadFibonacci(out uint value)
 	{
 		value = 0;

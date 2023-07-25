@@ -183,6 +183,7 @@ public class LempelZiv
 	private readonly List<ShortIntervalList> input, result;
 	private readonly int tn, huffmanIndex;
 	private readonly bool huffman, pixels, lw, cout, spaces;
+	private LZData lzData;
 	private const int LZDictionarySize = 32767;
 
 	public LempelZiv(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn, bool cout = false)
@@ -198,14 +199,17 @@ public class LempelZiv
 		this.cout = cout;
 	}
 
-	public List<ShortIntervalList> Encode()
+	public List<ShortIntervalList> Encode(out LZData lzData)
 	{
+		lzData = new();
 		var lzStart = 3 + (huffman ? (int)input[0][huffmanIndex + 1].Base : 0) + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : pixels ? 2 : 0);
 		if (input.Length <= lzStart)
 			return LempelZivDummy(input);
 		if (CreateVar(input[0].IndexOf(LempelZivApplied), out var lzIndex) != -1 && !(huffmanIndex != -1 && lzIndex == huffmanIndex + 1) && !(CreateVar(input[0].IndexOf(BWTApplied), out var bwtIndex) != -1 && lzIndex == bwtIndex + 1))
 			return input;
-		return huffman || input[0].Length >= 1 && input[0][0] == WordsApplied || pixels ? EncodeInts(lzStart, huffman, pixels) : EncodeBytes(lzStart);
+		var result = huffman || input[0].Length >= 1 && input[0][0] == WordsApplied || pixels ? EncodeInts(lzStart, huffman, pixels) : EncodeBytes(lzStart);
+		lzData = this.lzData;
+		return result;
 	}
 
 	private List<ShortIntervalList> EncodeInts(int lzStart, bool huffman = false, bool pixels = false)
@@ -465,6 +469,7 @@ public class LempelZiv
 		if (c.Length > 8)
 			result[0].Add(LempelZivSubdivided);
 		result.Insert(1 + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : pixels ? 2 : 0), c.SplitIntoEqual(8).Convert(x => new ShortIntervalList(x)));
+		lzData = (((uint)rDist, maxDist, thresholdDist), ((uint)rLength, maxLength, thresholdLength), useSpiralLengths, ((uint)rSpiralLength, maxSpiralLength, thresholdSpiralLength));
 		return result;
 	}
 
