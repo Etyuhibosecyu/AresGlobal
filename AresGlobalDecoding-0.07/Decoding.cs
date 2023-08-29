@@ -123,7 +123,7 @@ public class Decoding
 				if (start < 0)
 					return result;
 				for (var k = (int)((length + 2) * (spiralLength + 1)); k > 0; k -= (int)length + 2)
-					result.AddRange(result.AsSpan(start, (int)Min(length + 2, k)));
+					result.AddRange(result.GetSlice(start, (int)Min(length + 2, k)));
 			}
 			else
 				result.Add(compressedList[i]);

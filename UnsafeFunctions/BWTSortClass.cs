@@ -103,7 +103,7 @@ public class BWTSortClass2<T> where T : unmanaged, IComparable<T>
 		int[] lbstack = new int[64], ubstack = new int[64];
 		var stackpos = 0;
 		int middle;
-		Span<T> pivot;
+		Slice<T> pivot;
 		int temp;
 		lbstack[0] = lower;
 		ubstack[0] = upper;
@@ -117,12 +117,12 @@ public class BWTSortClass2<T> where T : unmanaged, IComparable<T>
 				middle = (lb + ub) / 2;
 				i = lb;
 				j = ub;
-				pivot = inArray.AsSpan(indexes[middle], indexes.Length);
+				pivot = inArray.GetSlice(indexes[middle], indexes.Length);
 				do
 				{
-					while (CompareSpans(inArray.AsSpan(indexes[i], indexes.Length), pivot) == -1)
+					while (CompareSlices(inArray.GetSlice(indexes[i], indexes.Length), pivot) == -1)
 						i++;
-					while (CompareSpans(inArray.AsSpan(indexes[j], indexes.Length), pivot) == 1)
+					while (CompareSlices(inArray.GetSlice(indexes[j], indexes.Length), pivot) == 1)
 						j--;
 					if (i <= j)
 					{
@@ -164,7 +164,7 @@ public class BWTSortClass2<T> where T : unmanaged, IComparable<T>
 	/// <remarks>В методе побайтно сравниваются два массива. 
 	/// Если очередные байты не равны, то возвращается результат: 1 если байт первого массива больше, -1 если меньше.
 	/// Если все байты оказались равны - возвращается 0.</remarks>
-	private static int CompareSpans(Span<T> left, Span<T> right)
+	private static int CompareSlices(Slice<T> left, Slice<T> right)
 	{
 		for (var i = 0; i < left.Length; i++)
 		{

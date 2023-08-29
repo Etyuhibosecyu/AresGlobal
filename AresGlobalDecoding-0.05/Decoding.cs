@@ -125,7 +125,7 @@ public class Decoding
 				if (d2 < 0)
 					return result;
 				for (var k = (int)((l + 2) * (sl + 1)); k > 0; k -= (int)l + 2)
-					result.AddRange(result.AsSpan(d2, (int)Min(l + 2, k)));
+					result.AddRange(result.GetSlice(d2, (int)Min(l + 2, k)));
 			}
 			else
 				result.Add(compressedList[i]);

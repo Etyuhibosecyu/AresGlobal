@@ -114,7 +114,6 @@ public static unsafe class Global
 	public static List<(uint[] Group, TSource Key)> PGroup<TSource>(this NList<TSource> source, int tn, G.IEqualityComparer<TSource>? comparer = null) where TSource : unmanaged
 	{
 		var lockObj = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
-		var lockObj2 = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
 		var count = source.Length;
 		var innerIndexes = (int*)Marshal.AllocHGlobal(sizeof(int) * count);
 		FillMemory(innerIndexes, count, 0);

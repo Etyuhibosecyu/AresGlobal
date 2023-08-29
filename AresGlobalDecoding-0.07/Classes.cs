@@ -58,14 +58,10 @@ public class ArithmeticEncoder : IDisposable
 	public void WriteFibonacci(uint number)
 	{
 		if (number == 0)
-		{
 			throw new ArgumentException(null);
-		}
 		var bits = EncodeFibonacci(number);
 		for (var i = 0; i < bits.Length; i++)
-		{
 			WriteEqual((uint)(bits[i] ? 1 : 0), 2);
-		}
 	}
 
 	private void WriteInternal()
