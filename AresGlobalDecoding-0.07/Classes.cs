@@ -12,11 +12,6 @@ public class ArithmeticEncoder : IDisposable
 	private const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
 	private uint l = l0, h = h0;
 	private int bitsToFollow;
-	private readonly List<List<List<uint>>> bMaps = new();
-	private readonly List<List<int>> deletedMaps = new();
-	private readonly List<int> mapPtr = new();
-	private readonly List<List<List<int>>> deletedMapElements = new();
-	private readonly List<List<int>> mapElementPtr = new();
 	private static readonly BitList[] shortLists = RedStarLinq.Fill(10, index => new BitList(index + 1, false)).Concat(RedStarLinq.Fill(10, index => new BitList(index + 1, true))).ToArray();
 
 	public int Length => bits.Length;
@@ -27,11 +22,11 @@ public class ArithmeticEncoder : IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	public void Write(int c, int bMapsGroup, int mapIndex)
+	public void Write(int c, List<uint> map)
 	{
 		uint ol = l, oh = h;
-		l = (uint)(ol + ((c == 0) ? 0 : bMaps[bMapsGroup][mapIndex][c - 1]) * ((ulong)oh - ol + 1) / bMaps[bMapsGroup][mapIndex][^1]);
-		h = (uint)(ol + bMaps[bMapsGroup][mapIndex][c] * ((ulong)oh - ol + 1) / bMaps[bMapsGroup][mapIndex][^1] - 1);
+		l = (uint)(ol + ((c == 0) ? 0 : map[c - 1]) * ((ulong)oh - ol + 1) / map[^1]);
+		h = (uint)(ol + map[c] * ((ulong)oh - ol + 1) / map[^1] - 1);
 		WriteInternal();
 	}
 
@@ -69,9 +64,7 @@ public class ArithmeticEncoder : IDisposable
 		while (true)
 		{
 			if (h < half)
-			{
 				Follow(false);
-			}
 			else if (l >= half)
 			{
 				Follow(true);
@@ -93,15 +86,6 @@ public class ArithmeticEncoder : IDisposable
 		}
 	}
 
-	public void Append(ArithmeticEncoder ar)
-	{
-		if (ar.bits.Length != 0)
-		{
-			Follow(ar.bits[0]);
-			bits.ReplaceRange(bits.Length - 1, 1, ar.bits);
-		}
-	}
-
 	private void Follow(bool bit)
 	{
 		bits.Add(bit);
@@ -110,94 +94,12 @@ public class ArithmeticEncoder : IDisposable
 		bitsToFollow = 0;
 	}
 
-	public int AddBMapsGroup()
-	{
-		bMaps.Add(new List<List<uint>>());
-		deletedMaps.Add(new List<int>());
-		mapPtr.Add(0);
-		deletedMapElements.Add(new List<List<int>>());
-		mapElementPtr.Add(new List<int>());
-		return bMaps.Length - 1;
-	}
-
-	public void RemoveBMapsGroup(int index)
-	{
-		bMaps.RemoveAt(index);
-		deletedMaps.RemoveAt(index);
-		deletedMapElements.RemoveAt(index);
-	}
-
-	public int AddBMap(int bMapsGroup, List<uint> bMap)
-	{
-		if (mapPtr[bMapsGroup] >= deletedMaps[bMapsGroup].Length)
-		{
-			bMaps[bMapsGroup].Add(bMap);
-			deletedMapElements[bMapsGroup].Add(new List<int>());
-			mapElementPtr[bMapsGroup].Add(0);
-			return bMaps[bMapsGroup].Length - 1;
-		}
-		else
-		{
-			bMaps[bMapsGroup][deletedMaps[bMapsGroup][mapPtr[bMapsGroup]]] = bMap;
-			if (mapPtr[bMapsGroup] >= 500)
-			{
-				deletedMaps[bMapsGroup].Remove(0, 500);
-				mapPtr[bMapsGroup] -= 500;
-			}
-			return deletedMaps[bMapsGroup][mapPtr[bMapsGroup]++];
-		}
-	}
-
-	public void RemoveBMap(int bMapsGroup, int index)
-	{
-		bMaps[bMapsGroup][index] = new List<uint>();
-		deletedMaps[bMapsGroup].Add(index);
-		deletedMapElements[bMapsGroup][index] = new List<int>();
-		mapElementPtr[bMapsGroup][index] = 0;
-	}
-
-	public int AddBMapElement(int bMapsGroup, int mapIndex, uint length)
-	{
-		if (mapElementPtr[bMapsGroup][mapIndex] >= deletedMapElements[bMapsGroup][mapIndex].Length)
-		{
-			bMaps[bMapsGroup][mapIndex].Add(((bMaps[bMapsGroup][mapIndex].Length == 0) ? 0 : bMaps[bMapsGroup][mapIndex][^1]) + length);
-			return bMaps[bMapsGroup][mapIndex].Length - 1;
-		}
-		else
-		{
-			ChangeBMapElement(bMapsGroup, mapIndex, deletedMapElements[bMapsGroup][mapIndex][mapElementPtr[bMapsGroup][mapIndex]], (int)length);
-			if (mapElementPtr[bMapsGroup][mapIndex] >= 500)
-			{
-				deletedMapElements[bMapsGroup][mapIndex].Remove(0, 500);
-				mapElementPtr[bMapsGroup][mapIndex] -= 500;
-			}
-			return deletedMapElements[bMapsGroup][mapIndex][mapElementPtr[bMapsGroup][mapIndex]++];
-		}
-	}
-
-	public void RemoveBMapElement(int bMapsGroup, int mapIndex, int elementIndex)
-	{
-		var n = -(int)(bMaps[bMapsGroup][mapIndex][elementIndex] - ((elementIndex == 0) ? 0 : bMaps[bMapsGroup][mapIndex][elementIndex - 1]));
-		ChangeBMapElement(bMapsGroup, mapIndex, elementIndex, n);
-		deletedMapElements[bMapsGroup][mapIndex].Add(elementIndex);
-	}
-
-	public void ChangeBMapElement(int bMapsGroup, int mapIndex, int elementIndex, int n)
-	{
-		for (var i = elementIndex; i < bMaps[bMapsGroup][mapIndex].Length; i++)
-			bMaps[bMapsGroup][mapIndex][i] = Max((i == 0) ? 1 : bMaps[bMapsGroup][mapIndex][i - 1], (uint)(bMaps[bMapsGroup][mapIndex][i] + n));
-	}
-
-	public uint GetBMapElementWidth(int bMapsGroup, int mapIndex, int elementIndex) => bMaps[bMapsGroup][mapIndex][elementIndex] - (elementIndex == 0 ? 0 : bMaps[bMapsGroup][mapIndex][elementIndex - 1]);
-
 	public static implicit operator byte[](ArithmeticEncoder x)
 	{
 		var bytes = new byte[(x.bits.Length + 7) / 8];
 		x.bits.CopyTo(bytes, 0);
 		return bytes;
 	}
-
-	public static implicit operator List<byte>(ArithmeticEncoder x) => ((byte[])x).ToList();
 }
 
 [DebuggerDisplay("Length = {Length}")]
@@ -207,11 +109,6 @@ public class ArithmeticDecoder : IDisposable
 	private const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
 	private uint l = l0, h = h0, value;
 	private int pos;
-	private readonly List<List<List<uint>>> bMaps = new();
-	private readonly List<List<int>> deletedMaps = new();
-	private readonly List<int> mapPtr = new();
-	private readonly List<List<List<int>>> deletedMapElements = new();
-	private readonly List<List<int>> mapElementPtr = new();
 
 	public int Length => bits.Length;
 
@@ -222,31 +119,10 @@ public class ArithmeticDecoder : IDisposable
 		pos = Min(32, bits.Length);
 	}
 
-	public ArithmeticDecoder(List<byte> byteList)
-	{
-		bits = new(byteList);
-		value = ReverseBits(bits.GetSmallRange(0, 32));
-		pos = Min(32, bits.Length);
-	}
-
 	public void Dispose()
 	{
 		bits.Dispose();
 		GC.SuppressFinalize(this);
-	}
-
-	public int Read(int bMapsGroup, int mapIndex)
-	{
-		uint ol = l, oh = h, divisor = bMaps[bMapsGroup][mapIndex][^1];
-		if (divisor == 0)
-			return 0;
-		int c;
-		var freq = (uint)((((ulong)value - ol + 1) * divisor - 1) / ((ulong)oh - ol + 1));
-		for (c = 0; bMaps[bMapsGroup][mapIndex][c] <= freq; c++) ;
-		l = (uint)(ol + ((c == 0) ? 0 : bMaps[bMapsGroup][mapIndex][c - 1]) * ((ulong)oh - ol + 1) / divisor);
-		h = (uint)(ol + bMaps[bMapsGroup][mapIndex][c] * ((ulong)oh - ol + 1) / divisor - 1);
-		ReadInternal();
-		return c;
 	}
 
 	public uint ReadEqual(uint cCount)
@@ -311,15 +187,11 @@ public class ArithmeticDecoder : IDisposable
 		{
 			input = ReadEqual(2) == 1;
 			if (input && one || sequencePos == FibonacciSequence.Length)
-			{
 				return true;
-			}
 			else
 			{
 				if (input)
-				{
 					value += FibonacciSequence[sequencePos];
-				}
 				sequencePos++;
 				one = input;
 			}
@@ -365,87 +237,7 @@ public class ArithmeticDecoder : IDisposable
 			return (byte)(bits[pos++] ? 1 : 0);
 	}
 
-	public int AddBMapsGroup()
-	{
-		bMaps.Add(new List<List<uint>>());
-		deletedMaps.Add(new List<int>());
-		mapPtr.Add(0);
-		deletedMapElements.Add(new List<List<int>>());
-		mapElementPtr.Add(new List<int>());
-		return bMaps.Length - 1;
-	}
-
-	public void RemoveBMapsGroup(int index)
-	{
-		bMaps.RemoveAt(index);
-		deletedMaps.RemoveAt(index);
-		deletedMapElements.RemoveAt(index);
-	}
-
-	public int AddBMap(int bMapsGroup, List<uint> bMap)
-	{
-		if (mapPtr[bMapsGroup] >= deletedMaps[bMapsGroup].Length)
-		{
-			bMaps[bMapsGroup].Add(bMap);
-			deletedMapElements[bMapsGroup].Add(new List<int>());
-			mapElementPtr[bMapsGroup].Add(0);
-			return bMaps[bMapsGroup].Length - 1;
-		}
-		else
-		{
-			bMaps[bMapsGroup][deletedMaps[bMapsGroup][mapPtr[bMapsGroup]]] = bMap;
-			if (mapPtr[bMapsGroup] >= 500)
-			{
-				deletedMaps[bMapsGroup].Remove(0, 500);
-				mapPtr[bMapsGroup] -= 500;
-			}
-			return deletedMaps[bMapsGroup][mapPtr[bMapsGroup]++];
-		}
-	}
-
-	public void RemoveBMap(int bMapsGroup, int index)
-	{
-		bMaps[bMapsGroup][index] = new List<uint>();
-		deletedMaps[bMapsGroup].Add(index);
-		deletedMapElements[bMapsGroup][index] = new List<int>();
-		mapElementPtr[bMapsGroup][index] = 0;
-	}
-
-	public int AddBMapElement(int bMapsGroup, int mapIndex, uint length)
-	{
-		if (mapElementPtr[bMapsGroup][mapIndex] >= deletedMapElements[bMapsGroup][mapIndex].Length)
-		{
-			bMaps[bMapsGroup][mapIndex].Add(((bMaps[bMapsGroup][mapIndex].Length == 0) ? 0 : bMaps[bMapsGroup][mapIndex][^1]) + length);
-			return bMaps[bMapsGroup][mapIndex].Length - 1;
-		}
-		else
-		{
-			ChangeBMapElement(bMapsGroup, mapIndex, deletedMapElements[bMapsGroup][mapIndex][mapElementPtr[bMapsGroup][mapIndex]], (int)length);
-			if (mapElementPtr[bMapsGroup][mapIndex] >= 500)
-			{
-				deletedMapElements[bMapsGroup][mapIndex].Remove(0, 500);
-				mapElementPtr[bMapsGroup][mapIndex] -= 500;
-			}
-			return deletedMapElements[bMapsGroup][mapIndex][mapElementPtr[bMapsGroup][mapIndex]++];
-		}
-	}
-
-	public void RemoveBMapElement(int bMapsGroup, int mapIndex, int elementIndex)
-	{
-		var n = -(int)(bMaps[bMapsGroup][mapIndex][elementIndex] - ((elementIndex == 0) ? 0 : bMaps[bMapsGroup][mapIndex][elementIndex - 1]));
-		ChangeBMapElement(bMapsGroup, mapIndex, elementIndex, n);
-		deletedMapElements[bMapsGroup][mapIndex].Add(elementIndex);
-	}
-
-	public void ChangeBMapElement(int bMapsGroup, int mapIndex, int elementIndex, int n)
-	{
-		for (var i = elementIndex; i < bMaps[bMapsGroup][mapIndex].Length; i++)
-			bMaps[bMapsGroup][mapIndex][i] = Max((i == 0) ? 1 : bMaps[bMapsGroup][mapIndex][i - 1], (uint)(bMaps[bMapsGroup][mapIndex][i] + n));
-	}
-
 	public static implicit operator ArithmeticDecoder(byte[] x) => new(x);
-
-	public static implicit operator ArithmeticDecoder(List<byte> x) => new(x);
 }
 
 public struct ImageData
