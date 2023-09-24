@@ -218,15 +218,15 @@ public class LempelZiv
 		{
 			0 => 1234567890,
 			1 => x[0].GetHashCode(),
-			2 => x[0].GetHashCode() << 9 ^ x[1].GetHashCode(),
-			_ => (x[0].GetHashCode() << 9 ^ x[1].GetHashCode()) << 9 ^ x[^1].GetHashCode(),
+			2 => x[0].GetHashCode() << 7 ^ x[1].GetHashCode(),
+			_ => (x[0].GetHashCode() << 7 ^ x[1].GetHashCode()) << 7 ^ x[^1].GetHashCode(),
 		}).NConvert(x => ((uint)x, 0u)) : input.GetSlice(lzStart - 2).NConvert((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
 		var (preIndexCodes, secondaryCodes) = complexCodes.NBreak();
 		var secondaryCodesActive = secondaryCodes.Any(x => x is not 0);
 		Current[tn] = 0;
 		CurrentMaximum[tn] = ProgressBarStep * 2;
 		var combined = preIndexCodes.NPairs((x, y) => (ulong)x << 32 | y);
-		var indexCodesList = combined.PGroup(tn, new EComparer<ulong>((x, y) => x == y, x => (int)(x >> 32) << 9 ^ (int)x)).FilterInPlace(x => x.Group.Length >= 2);
+		var indexCodesList = combined.PGroup(tn, new EComparer<ulong>((x, y) => x == y, x => ((int)(x >> 32)) << 7 ^ (int)x)).FilterInPlace(x => x.Group.Length >= 2);
 		combined.Dispose();
 		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.Sort());
 		indexCodesList.Dispose();
@@ -234,7 +234,7 @@ public class LempelZiv
 		StatusMaximum[tn] = indexCodes.Sum(x => x.Length);
 		Current[tn] += ProgressBarStep;
 		var startKGlobal = 2;
-		Dictionary<uint, (ushort dist, ushort length, ushort spiralLength)> repeatsInfo = new();
+		Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo = new();
 		TreeSet<int> maxReached = new();
 		Dictionary<int, int> maxReachedLengths = new();
 		uint useSpiralLengths = 0;
@@ -274,19 +274,19 @@ public class LempelZiv
 				for (; k <= ub && matches.Length > 1; k++)
 				{
 					lastMatch = (int)matches[^1];
-					matches.FilterInPlace(jIC => complexCodes[iIC + k] == complexCodes[(int)(jIC + k)]);
+					matches.FilterInPlace(jIC => complexCodes[iIC + k] == complexCodes[(int)(jIC + k)] && !(k > 65537 && k <= iIC - jIC));
 					if (k == ub || matches.Length == 0 || iIC - matches[^1] >= (iIC - lastMatch) << 3 && lastMatch - matches[^1] >= 64) break;
 				}
 				if (matches.Length == 1)
 				{
 					lastMatch = (int)matches[^1];
-					var ub2 = Min(ub, (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
-					k += complexCodes.Compare(iIC + k, complexCodes, lastMatch + k);
+					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
+					k += complexCodes.Compare(iIC + k, complexCodes, lastMatch + k, ub2 - k + 1);
 				}
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (ushort)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 				if (k > ub || sl == ushort.MaxValue)
@@ -306,7 +306,7 @@ public class LempelZiv
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (ushort)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
@@ -329,7 +329,7 @@ public class LempelZiv
 		StatusMaximum[tn] = indexCodes.Sum(x => x.Length);
 		Current[tn] += ProgressBarStep;
 		var startKGlobal = 3;
-		Dictionary<uint, (ushort dist, ushort length, ushort spiralLength)> repeatsInfo = new();
+		Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo = new();
 		TreeSet<int> maxReached = new();
 		Dictionary<int, int> maxReachedLengths = new();
 		uint useSpiralLengths = 0;
@@ -367,19 +367,19 @@ public class LempelZiv
 				for (; k <= ub && matches.Length > 1; k++)
 				{
 					lastMatch = (int)matches[^1];
-					matches.FilterInPlace(jIC => preIndexCodes[iIC + k] == preIndexCodes[(int)(jIC + k)]);
+					matches.FilterInPlace(jIC => preIndexCodes[iIC + k] == preIndexCodes[(int)(jIC + k)] && !(k > 65537 && k <= iIC - jIC));
 					if (k == ub || matches.Length == 0 || iIC - matches[^1] >= (iIC - lastMatch) << 3 && lastMatch - matches[^1] >= 64) break;
 				}
 				if (matches.Length == 1)
 				{
 					lastMatch = (int)matches[^1];
-					var ub2 = Min(ub, (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
-					k += preIndexCodes.Compare(iIC + k, preIndexCodes, lastMatch + k);
+					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
+					k += preIndexCodes.Compare(iIC + k, preIndexCodes, lastMatch + k, ub2 - k + 1);
 				}
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (ushort)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 				if (k > ub || sl == ushort.MaxValue)
@@ -394,19 +394,19 @@ public class LempelZiv
 				if (maxReached.Length != 0 && Lock(lockObj, () => CreateVar(maxReached.IndexOfNotLess(iIC), out var mr) >= 1 && maxReachedLengths[maxReached[mr - 1]] > iIC - maxReached[mr - 1]))
 					continue;
 				var jIC = (int)ic[i - 1];
-				if (!(iIC - jIC is >= 2 and < LZDictionarySize))
+				if (iIC - jIC is < 2 or >= LZDictionarySize)
 					continue;
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (ushort)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
 		}
 	}
 
-	public static void UpdateRepeatsInfo<T>(Dictionary<uint, (T dist, T length, T spiralLength)> repeatsInfo, object lockObj, int key, uint localMaxLength, T dist, T length, T sl, PrimitiveType type) where T : unmanaged
+	public static void UpdateRepeatsInfo<T>(Dictionary<uint, (uint dist, T length, T spiralLength)> repeatsInfo, object lockObj, int key, uint localMaxLength, uint dist, T length, T sl, PrimitiveType type) where T : unmanaged
 	{
 		if (repeatsInfo.ContainsKey((uint)key))
 		{
@@ -423,7 +423,7 @@ public class LempelZiv
 		}
 	}
 
-	private List<ShortIntervalList> WriteLZ(List<ShortIntervalList> input, int lzStart, Dictionary<uint, (ushort dist, ushort length, ushort spiralLength)> repeatsInfo, uint useSpiralLengths)
+	private List<ShortIntervalList> WriteLZ(List<ShortIntervalList> input, int lzStart, Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo, uint useSpiralLengths)
 	{
 		if (repeatsInfo.Length == 0)
 			return LempelZivDummy(input);
@@ -446,9 +446,9 @@ public class LempelZiv
 		elementsReplaced.Dispose();
 		result[0].Add(LempelZivApplied);
 		List<Interval> c = new() { new Interval((uint)rDist, 3) };
-		c.WriteCount(maxDist, 16);
+		c.WriteCount(maxDist);
 		if (rDist != 0)
-			c.Add(new(thresholdDist, (uint)maxDist + 1));
+			c.Add(new(thresholdDist, maxDist + 1));
 		c.Add(new Interval((uint)rLength, 3));
 		c.WriteCount(maxLength, 16);
 		if (rLength != 0)
@@ -465,7 +465,7 @@ public class LempelZiv
 		}
 #if DEBUG
 		var input2 = input.Skip(lzStart - 2);
-		var decoded = DecodeLempelZiv(result.GetRange(lzStart - 2), true, rDist, thresholdDist, rLength, thresholdLength, useSpiralLengths, rSpiralLength, thresholdSpiralLength, tn);
+		var decoded = result.GetRange(lzStart - 2).DecodeLempelZiv(true, rDist, thresholdDist, rLength, thresholdLength, useSpiralLengths, rSpiralLength, thresholdSpiralLength, tn);
 		for (var i = 0; i < input2.Length && i < decoded.Length; i++)
 			for (var j = 0; j < input2[i].Length && j < decoded[i].Length; j++)
 			{
@@ -484,7 +484,7 @@ public class LempelZiv
 		return result;
 	}
 
-	public static void LZRequisites<T>(int inputLength, int multiplier, Dictionary<uint, (T dist, T length, T spiralLength)> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (T dist, T length, T spiralLength)>>> repeatsInfoList2, out NList<uint> starts, out NList<T> dists, out NList<T> lengths, out NList<T> spiralLengths, out T maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
+	public static void LZRequisites<T>(int inputLength, int multiplier, Dictionary<uint, (uint dist, T length, T spiralLength)> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList2, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
 	{
 		var repeatsInfoList = repeatsInfo.ToNList().Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
 		var boundIndex2 = boundIndex = repeatsInfoList.FindIndex(x => (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) < multiplier * 10);
@@ -496,21 +496,22 @@ public class LempelZiv
 		repeatsInfoList.Dispose();
 		(starts, (dists, lengths, spiralLengths)) = (sortedRepeatsInfo.Item1, sortedRepeatsInfo.Item2.PNBreak());
 		sortedRepeatsInfo.Item2.Dispose();
-		((var distsSum, maxDist), (var lengthsSum, maxLength), (var spiralLengthsSum, maxSpiralLength)) = new[] { dists, lengths, spiralLengths }.PNConvert(l => (l.Sum(x => ToUInt(x, type)), l.Max())).Wrap(x => (x[0], x[1], x[2]));
+		(var distsSum, maxDist) = dists.Wrap(l => (l.Sum(), l.Max()));
+		((var lengthsSum, maxLength), (var spiralLengthsSum, maxSpiralLength)) = new[] { lengths, spiralLengths }.PNConvert(l => (l.Sum(x => ToUInt(x, type)), l.Max())).Wrap(x => (x[0], x[1]));
 		var mediumDist = (int)Max(distsSum / dists.Length, 1);
-		(rDist, thresholdDist) = CreateVar(dists.Count(x => ToInt(x, type) >= mediumDist), out var n) <= dists.Length / 3 ? (1, ToUInt(dists.Filter(x => ToInt(x, type) < mediumDist).Max(), type)) : (n > dists.Length * 2 / 3) ? (2, ToUInt(dists.Filter(x => ToInt(x, type) >= mediumDist).Min(), type)) : (0, 0);
+		(rDist, thresholdDist) = CreateVar(dists.Count(x => x >= mediumDist), out var n) <= dists.Length / 3 ? (1, dists.Filter(x => x < mediumDist).Max()) : (n > dists.Length * 2 / 3) ? (2, dists.Filter(x => x >= mediumDist).Min()) : (0, 0);
 		var mediumLength = (int)Max(lengthsSum / lengths.Length, 1);
 		(rLength, thresholdLength) = CreateVar(lengths.Count(x => ToInt(x, type) >= mediumLength), out n) <= lengths.Length / 3 ? (1, ToUInt(lengths.Filter(x => ToInt(x, type) < mediumLength).Max(), type)) : (n > lengths.Length * 2 / 3) ? (2, ToUInt(lengths.Filter(x => ToInt(x, type) >= mediumLength).Min(), type)) : (0, 0);
 		var mediumSpiralLength = (int)Max(spiralLengthsSum / spiralLengths.Length, 1);
 		(rSpiralLength, thresholdSpiralLength) = CreateVar(spiralLengths.Count(x => ToInt(x, type) >= mediumSpiralLength), out n) <= spiralLengths.Length / 3 ? (1, ToUInt(spiralLengths.Filter(x => ToInt(x, type) < mediumSpiralLength).Max(), type)) : (n > spiralLengths.Length * 2 / 3) ? (2, ToUInt(spiralLengths.Filter(x => ToInt(x, type) >= mediumSpiralLength).Min(), type)) : (0, 0);
 	}
 
-	private void WriteLZMatches<T>(List<ShortIntervalList> input, int lzStart, uint useSpiralLengths, NList<uint> starts, NList<T> dists, NList<T> lengths, NList<T> spiralLengths, T maxDist, T maxLength, T maxSpiralLength, int rDist, uint thresholdDist, int rLength, uint thresholdLength, int rSpiralLength, uint thresholdSpiralLength, BitList elementsReplaced, PrimitiveType type, bool changeBase = true) where T : unmanaged
+	private void WriteLZMatches<T>(List<ShortIntervalList> input, int lzStart, uint useSpiralLengths, NList<uint> starts, NList<uint> dists, NList<T> lengths, NList<T> spiralLengths, uint maxDist, T maxLength, T maxSpiralLength, int rDist, uint thresholdDist, int rLength, uint thresholdLength, int rSpiralLength, uint thresholdSpiralLength, BitList elementsReplaced, PrimitiveType type, bool changeBase = true) where T : unmanaged
 	{
 		double statesNumLog1, statesNumLog2;
 		for (var i = 0; i < starts.Length; i++, Status[tn]++)
 		{
-			uint iDist = ToUInt(dists[i], type), iLength = ToUInt(lengths[i], type), iSpiralLength = ToUInt(spiralLengths[i], type);
+			uint iDist = dists[i], iLength = ToUInt(lengths[i], type), iSpiralLength = ToUInt(spiralLengths[i], type);
 			var localMaxLength = (iLength + 2) * (iSpiralLength + 1) - 2;
 			var iStart = (int)starts[i];
 			var oldBase = input[iStart][0].Base;
@@ -522,7 +523,7 @@ public class LempelZiv
 				{
 					iDist -= (uint)(replacedIndex - iStart - 3 - iLength);
 					localMaxLength = iLength = (uint)(replacedIndex - iStart - 3);
-					if (iDist > ToUInt(maxDist, type)) continue;
+					if (iDist > maxDist) continue;
 				}
 				else
 					continue;
@@ -530,7 +531,7 @@ public class LempelZiv
 			for (var k = iStart; k <= iStart + localMaxLength + 1; k++)
 				statesNumLog1 += input[k].Sum(x => Log(x.Base) - Log(x.Length));
 			statesNumLog2 = Log(newBase) - Log(newBase - oldBase);
-			statesNumLog2 += StatesNumLogSum(iDist, rDist, ToUInt(maxDist, type), thresholdDist, useSpiralLengths);
+			statesNumLog2 += StatesNumLogSum(iDist, rDist, maxDist, thresholdDist, useSpiralLengths);
 			statesNumLog2 += StatesNumLogSum(iLength, rLength, ToUInt(maxLength, type), thresholdLength);
 			if (useSpiralLengths == 1 && iLength < localMaxLength)
 				statesNumLog2 += StatesNumLogSum(iSpiralLength, rSpiralLength, ToUInt(maxSpiralLength, type), thresholdSpiralLength);
@@ -538,7 +539,7 @@ public class LempelZiv
 				continue;
 			ShortIntervalList b = new() { new(oldBase, newBase - oldBase, newBase) };
 			WriteLZValue(b, iLength, rLength, ToUInt(maxLength, type), thresholdLength);
-			var maxDist2 = Min(ToUInt(maxDist, type), (uint)(iStart - iLength - lzStart));
+			var maxDist2 = Min(maxDist, (uint)(iStart - iLength - lzStart));
 			if (useSpiralLengths == 0)
 				WriteLZValue(b, iDist, rDist, maxDist2, thresholdDist);
 			else if (iLength >= localMaxLength)
@@ -633,7 +634,7 @@ public class LempelZiv
 		result.Replace(input);
 		result[0] = new(result[0]) { LempelZivDummyApplied };
 		List<Interval> list = new() { new(0, 3) };
-		list.WriteCount(0, 16);
+		list.WriteCount(0);
 		list.Add(new(0, 3));
 		list.WriteCount(0, 16);
 		list.Add(new(0, 2));
@@ -644,172 +645,75 @@ public class LempelZiv
 
 public class RLE
 {
-	private readonly byte[] originalFile;
+	private readonly NList<byte> input;
 	private readonly int tn;
 
-	public RLE(byte[] originalFile, int tn)
+	public RLE(NList<byte> input, int tn)
 	{
-		this.originalFile = originalFile;
+		this.input = input;
 		this.tn = tn;
 	}
 
-	public byte[] Encode()
+	public NList<byte> Encode()
 	{
-		List<byte> result = new();
-		int length = 1, currentSerie = 2;
-		if (originalFile.Length < 1)
-			return originalFile;
-		var previous = originalFile[0];
-		var doNotReadSerie1 = false;
+		NList<byte> result = new();
+		if (input.Length < 1)
+			return input;
 		Current[tn] = 0;
 		CurrentMaximum[tn] = 0;
 		Status[tn] = 0;
-		StatusMaximum[tn] = originalFile.Length;
-		for (var i = 1; i < originalFile.Length; i++, Status[tn]++)
+		StatusMaximum[tn] = input.Length;
+		for (var i = 0; i < input.Length;)
 		{
-			if (currentSerie == 1)
+			result.Add(input[i++]);
+			if (i == input.Length)
+				break;
+			var j = i;
+			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] == input[i - 1])
+				i++;
+			if (i != j)
 			{
-				if (originalFile[i] == previous)
-				{
-					length++;
-					if (length >= ValuesIn2Bytes)
-					{
-						result.AddRange(new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), originalFile[i] });
-						length = 0;
-						currentSerie = 2;
-						doNotReadSerie1 = true;
-						if (i > originalFile.Length - 1)
-							break;
-					}
-				}
-				else
-				{
-					result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), previous } : new List<byte> { (byte)(length - 1), previous });
-					length = 1;
-					currentSerie = 2;
-				}
+				result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j - 1) } : new[] { (byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1)) });
+				continue;
 			}
-			else
-			{
-				if (originalFile[i] == previous && !doNotReadSerie1)
-				{
-					if (length >= 2)
-					{
-						result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { ValuesInByte - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)) } : new List<byte> { (byte)(length + ((ValuesInByte >> 1) - 1)) });
-						for (var j = i - length; j < i - 1; j++)
-							result.Add(originalFile[j]);
-					}
-					length = 2;
-					currentSerie = 1;
-				}
-				else
-				{
-					length++;
-					doNotReadSerie1 = false;
-					if (length >= ValuesIn2Bytes)
-					{
-						result.AddRange(new List<byte> { ValuesInByte - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)) });
-						for (var j = i - length + 1; j < i; j++)
-							result.Add(originalFile[j]);
-						length = 0;
-						if (i > originalFile.Length - 1)
-							break;
-					}
-				}
-			}
-			previous = originalFile[i];
+			j = i;
+			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] != input[i - 1])
+				i++;
+			i--;
+			result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice(j..i));
 		}
-		if (currentSerie == 1)
-			result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), originalFile[^1] } : new List<byte> { (byte)(length - 1), originalFile[^1] });
-		else
-		{
-			if (length != 0)
-			{
-				result.AddRange(length >= (ValuesInByte >> 1) - 1 ? new List<byte> { ValuesInByte - 1, (byte)((length - ((ValuesInByte >> 1) - 1)) >> BitsPerByte), (byte)(length - ((ValuesInByte >> 1) - 1)) } : new List<byte> { (byte)(length + (ValuesInByte >> 1)) });
-				for (var j = originalFile.Length - length; j < originalFile.Length; j++)
-					result.Add(originalFile[j]);
-			}
-		}
-		return result.ToArray();
+		return result;
 	}
 
-	public byte[] RLE3()
+	public NList<byte> RLE3()
 	{
-		if (originalFile.Length < 3 || originalFile.Length % 3 != 0)
-			return originalFile;
+		NList<byte> result = new();
+		if (input.Length < 3 || input.Length % 3 != 0)
+			return input;
+		var length = input.Length / 3;
 		Current[tn] = 0;
 		CurrentMaximum[tn] = 0;
 		Status[tn] = 0;
-		StatusMaximum[tn] = originalFile.Length / 3;
-		List<byte> result = new();
-		int length = 1, currentSerie = 2;
-		List<byte> previous = new() { originalFile[0], originalFile[1], originalFile[2] };
-		var doNotReadSerie1 = false;
-		for (var i = 3; i < originalFile.Length; i += 3, Status[tn]++)
+		StatusMaximum[tn] = length;
+		for (var i = 0; i < length;)
 		{
-			if (currentSerie == 1)
+			result.AddRange(input.GetSlice(i++ * 3, 3));
+			if (i == length)
+				break;
+			var j = i;
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) == 3)
+				i++;
+			if (i != j)
 			{
-				if (originalFile[i] == previous[0] && originalFile[i + 1] == previous[1] && originalFile[i + 2] == previous[2])
-				{
-					length++;
-					if (length >= ValuesIn2Bytes)
-					{
-						result.AddRange(new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), originalFile[i], originalFile[i + 1], originalFile[i + 2] });
-						length = 0;
-						currentSerie = 2;
-						doNotReadSerie1 = true;
-						if (i > originalFile.Length - 1)
-							break;
-					}
-				}
-				else
-				{
-					result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), previous[0], previous[1], previous[2] } : new List<byte> { (byte)(length - 1), previous[0], previous[1], previous[2] });
-					length = 1;
-					currentSerie = 2;
-				}
+				result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j - 1) } : new[] { (byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1)) });
+				continue;
 			}
-			else
-			{
-				if (originalFile[i] == previous[0] && originalFile[i + 1] == previous[1] && originalFile[i + 2] == previous[2] && !doNotReadSerie1)
-				{
-					if (length >= 2)
-					{
-						result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { ValuesInByte - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)) } : new List<byte> { (byte)(length + ((ValuesInByte >> 1) - 1)) });
-						for (var j = i - length * 3; j < i - 3; j++)
-							result.Add(originalFile[j]);
-					}
-					length = 2;
-					currentSerie = 1;
-				}
-				else
-				{
-					length++;
-					doNotReadSerie1 = false;
-					if (length >= ValuesIn2Bytes)
-					{
-						result.AddRange(new List<byte> { ValuesInByte - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)) });
-						for (var j = i - length * 3 + 3; j < i + 3; j++)
-							result.Add(originalFile[j]);
-						length = 0;
-						if (i > originalFile.Length - 1)
-							break;
-					}
-				}
-			}
-			previous = new() { originalFile[i], originalFile[i + 1], originalFile[i + 2] };
+			j = i;
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
+				i++;
+			i--;
+			result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice((j * 3)..(i * 3)));
 		}
-		if (currentSerie == 1)
-			result.AddRange(length >= ValuesInByte >> 1 ? new List<byte> { (ValuesInByte >> 1) - 1, (byte)((length - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(length - (ValuesInByte >> 1)), originalFile[^3], originalFile[^2], originalFile[^1] } : new List<byte> { (byte)(length - 1), originalFile[^3], originalFile[^2], originalFile[^1] });
-		else
-		{
-			if (length != 0)
-			{
-				result.AddRange(length >= (ValuesInByte >> 1) - 1 ? new List<byte> { ValuesInByte - 1, (byte)((length - ((ValuesInByte >> 1) - 1)) >> BitsPerByte), (byte)(length - ((ValuesInByte >> 1) - 1)) } : new List<byte> { (byte)(length + (ValuesInByte >> 1)) });
-				for (var j = originalFile.Length - length * 3; j < originalFile.Length; j++)
-					result.Add(originalFile[j]);
-			}
-		}
-		return result.ToArray();
+		return result;
 	}
 }

@@ -16,7 +16,6 @@ public static unsafe class Global
 {
 	public const int MillisecondsPerSecond = 1000;
 	public const int ProgressBarStep = 10;
-	public const int BitsPerByte = 8;
 	public const int ValuesInByte = 1 << BitsPerByte;
 	public const int ValuesIn2Bytes = ValuesInByte << BitsPerByte;
 	public const int ValuesIn3Bytes = ValuesIn2Bytes << BitsPerByte;
@@ -143,6 +142,81 @@ public static unsafe class Global
 		Marshal.FreeHGlobal((IntPtr)innerCount);
 		Marshal.FreeHGlobal((IntPtr)innerIndexes2);
 		Marshal.FreeHGlobal((IntPtr)innerIndexes);
+		return result;
+	}
+
+	public static int BWTCompare<T>(this T[] buffer, int n) where T : unmanaged
+	{
+		List<nint> list = new();
+		fixed (T* ptr = buffer)
+		{
+			for (var i = 0; i < n; i++)
+				list.Add((nint)(ptr + i));
+			return Min(BWTCompare(list, GetArrayLength(n, sizeof(ulong) / sizeof(T))) * sizeof(ulong) / sizeof(T), n);
+		}
+	}
+
+	private static int BWTCompare(List<nint> list, int n)
+	{
+		if (list.Length <= 1)
+			return 0;
+		var level = 0;
+		var pos = 0;
+		var result = 0;
+		Stack<List<nint>> listStack = new(2 * BitsCount((uint)n + 1));
+		Stack<List<Group<nint, ulong>>> groupsStack = new(2 * BitsCount((uint)n + 1));
+		Stack<int> levelStack = new(2 * BitsCount((uint)n + 1));
+		Stack<int> posStack = new(2 * BitsCount((uint)n + 1));
+		List<Group<nint, ulong>> groups;
+		listStack.Push(list);
+		groupsStack.Push(groups = list.Group(x => *(ulong*)x));
+		levelStack.Push(0);
+		posStack.Push(0);
+		while (groups.Length < list.Length)
+		{
+			list = groups[0];
+			var oldLevel = level++;
+			while (level < n && groups.Length == 1 && list.Skip(1).All(x => *((ulong*)x + level) == *((ulong*)list[0] + level)))
+				level++;
+			if (level >= n)
+			{
+				level = oldLevel;
+				break;
+			}
+			listStack.Push(list);
+			groupsStack.Push(groups = list.Group(x => *((ulong*)x + level)));
+			levelStack.Push(level);
+			posStack.Push(0);
+		}
+		result = Max(result, level + 1);
+		while (listStack.TryPeek(out list) && groupsStack.TryPeek(out groups) && levelStack.TryPeek(out level) && posStack.TryPop(out pos))
+		{
+			if (++pos >= groups.Length)
+			{
+				listStack.Pop();
+				groupsStack.Pop();
+				levelStack.Pop();
+				continue;
+			}
+			posStack.Push(pos);
+			while (groups.Length < list.Length)
+			{
+				list = groups[pos];
+				var oldLevel = level++;
+				while (level < n && groups.Length == 1 && list.Skip(1).All(x => *((ulong*)x + level) == *((ulong*)list[0] + level)))
+					level++;
+				if (level >= n)
+				{
+					level = oldLevel;
+					break;
+				}
+				listStack.Push(list);
+				groupsStack.Push(groups = list.Group(x => *((ulong*)x + level)));
+				levelStack.Push(level);
+				posStack.Push(pos = 0);
+			}
+			result = Max(result, level + 1);
+		}
 		return result;
 	}
 

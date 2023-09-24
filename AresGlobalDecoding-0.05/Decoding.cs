@@ -29,106 +29,97 @@ public class Decoding
 		int j, j2;
 		for (var i = 0; i < compressedList.Length; i++, Status[tn]++)
 		{
-			if (i >= 2 && compressedList[i][0].Lower + compressedList[i][0].Length == compressedList[i][0].Base)
+			if (i < 2 || compressedList[i][0].Lower + compressedList[i][0].Length != compressedList[i][0].Base)
 			{
-				var readSpiralLength = false;
-				if (lzRLength == 0)
-				{
-					l = compressedList[i][1].Lower;
-					j = 1;
-				}
-				else
-				{
-					if (lzRLength == 1 != (compressedList[i][1].Lower == compressedList[i][1].Base - 1))
-					{
-						l = compressedList[i][lzRLength].Lower;
-						j = lzRLength;
-					}
-					else
-					{
-						l = (uint)(compressedList[i][3 - lzRLength].Lower + lzThresholdLength + 2 - lzRLength);
-						j = 3 - lzRLength;
-					}
-				}
-				if (lzUseSpiralLengths == 0)
-				{
-					if (lzRDist == 0 || result.Length - l - 2 < lzThresholdDist)
-					{
-						d = compressedList[i][j + 1].Lower;
-						j2 = j + 1;
-					}
-					else
-					{
-						if (lzRDist == 1 != (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1))
-						{
-							d = compressedList[i][j + lzRDist].Lower;
-							j2 = j + lzRDist;
-						}
-						else
-						{
-							d = (uint)(compressedList[i][j + 3 - lzRDist].Lower + lzThresholdDist + 2 - lzRDist);
-							j2 = j + 3 - lzRDist;
-						}
-					}
-				}
-				else if (lzRDist == 0 || result.Length - l - 2 < lzThresholdDist)
-				{
-					if (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1)
-					{
-						d = 0;
-						readSpiralLength = true;
-					}
-					else
-						d = compressedList[i][j + 1].Lower;
-					j2 = j + 1;
-				}
-				else
-				{
-					if (lzRDist == 1 != (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1))
-					{
-						if (lzRDist == 2 && compressedList[i][j + lzRDist].Lower == compressedList[i][j + lzRDist].Base - 1)
-						{
-							d = 0;
-							readSpiralLength = true;
-						}
-						else
-							d = compressedList[i][j + lzRDist].Lower;
-						j2 = j + lzRDist;
-					}
-					else
-					{
-						if (3 - lzRDist == 2 && compressedList[i][j + 3 - lzRDist].Lower == compressedList[i][j + 3 - lzRDist].Base - 1)
-						{
-							d = 0;
-							readSpiralLength = true;
-						}
-						else
-							d = (uint)(compressedList[i][j + 3 - lzRDist].Lower + lzThresholdDist + 2 - lzRDist);
-						j2 = j + 3 - lzRDist;
-					}
-				}
-				if (readSpiralLength)
-				{
-					if (lzRSpiralLength == 0)
-						sl = compressedList[i][j2 + 1].Lower;
-					else
-					{
-						if (lzRSpiralLength == 1 != (compressedList[i][j2 + 1].Lower == compressedList[i][j2 + 1].Base - 1))
-							sl = compressedList[i][j2 + lzRSpiralLength].Lower;
-						else
-							sl = (uint)(compressedList[i][j2 + 3 - lzRSpiralLength].Lower + lzThresholdSpiralLength + 2 - lzRSpiralLength);
-					}
-				}
-				else
-					sl = 0;
-				var d2 = (int)(result.Length - d - l - 2);
-				if (d2 < 0)
-					return result;
-				for (var k = (int)((l + 2) * (sl + 1)); k > 0; k -= (int)l + 2)
-					result.AddRange(result.GetSlice(d2, (int)Min(l + 2, k)));
+				result.Add(compressedList[i]);
+				continue;
+			}
+			var readSpiralLength = false;
+			if (lzRLength == 0)
+			{
+				l = compressedList[i][1].Lower;
+				j = 1;
+			}
+			else if (lzRLength == 1 != (compressedList[i][1].Lower == compressedList[i][1].Base - 1))
+			{
+				l = compressedList[i][lzRLength].Lower;
+				j = lzRLength;
 			}
 			else
-				result.Add(compressedList[i]);
+			{
+				l = (uint)(compressedList[i][3 - lzRLength].Lower + lzThresholdLength + 2 - lzRLength);
+				j = 3 - lzRLength;
+			}
+			if (lzUseSpiralLengths == 0)
+			{
+				if (lzRDist == 0 || result.Length - l - 2 < lzThresholdDist)
+				{
+					d = compressedList[i][j + 1].Lower;
+					j2 = j + 1;
+				}
+				else if (lzRDist == 1 != (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1))
+				{
+					d = compressedList[i][j + lzRDist].Lower;
+					j2 = j + lzRDist;
+				}
+				else
+				{
+					d = (uint)(compressedList[i][j + 3 - lzRDist].Lower + lzThresholdDist + 2 - lzRDist);
+					j2 = j + 3 - lzRDist;
+				}
+			}
+			else if (lzRDist == 0 || result.Length - l - 2 < lzThresholdDist)
+			{
+				if (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1)
+				{
+					d = 0;
+					readSpiralLength = true;
+				}
+				else
+					d = compressedList[i][j + 1].Lower;
+				j2 = j + 1;
+			}
+			else if (lzRDist == 1 != (compressedList[i][j + 1].Lower == compressedList[i][j + 1].Base - 1))
+			{
+				if (lzRDist == 2 && compressedList[i][j + lzRDist].Lower == compressedList[i][j + lzRDist].Base - 1)
+				{
+					d = 0;
+					readSpiralLength = true;
+				}
+				else
+					d = compressedList[i][j + lzRDist].Lower;
+				j2 = j + lzRDist;
+			}
+			else
+			{
+				if (3 - lzRDist == 2 && compressedList[i][j + 3 - lzRDist].Lower == compressedList[i][j + 3 - lzRDist].Base - 1)
+				{
+					d = 0;
+					readSpiralLength = true;
+				}
+				else
+					d = (uint)(compressedList[i][j + 3 - lzRDist].Lower + lzThresholdDist + 2 - lzRDist);
+				j2 = j + 3 - lzRDist;
+			}
+			if (readSpiralLength)
+			{
+				if (lzRSpiralLength == 0)
+					sl = compressedList[i][j2 + 1].Lower;
+				else
+				{
+					if (lzRSpiralLength == 1 != (compressedList[i][j2 + 1].Lower == compressedList[i][j2 + 1].Base - 1))
+						sl = compressedList[i][j2 + lzRSpiralLength].Lower;
+					else
+						sl = (uint)(compressedList[i][j2 + 3 - lzRSpiralLength].Lower + lzThresholdSpiralLength + 2 - lzRSpiralLength);
+				}
+			}
+			else
+				sl = 0;
+			var d2 = (int)(result.Length - d - l - 2);
+			if (d2 < 0)
+				return result;
+			for (var k = (int)((l + 2) * (sl + 1)); k > 0; k -= (int)l + 2)
+				result.AddRange(result.GetSlice(d2, (int)Min(l + 2, k)));
 		}
 		return result;
 	}
