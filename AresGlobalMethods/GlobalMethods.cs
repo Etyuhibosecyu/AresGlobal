@@ -184,7 +184,7 @@ public class LempelZiv
 	private readonly int tn, huffmanIndex;
 	private readonly bool huffman, pixels, lw, cout, spaces;
 	private LZData lzData;
-	private const int LZDictionarySize = 32767;
+	public const int LZDictionarySize = 32767;
 
 	public LempelZiv(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn, bool cout = false)
 	{
@@ -680,7 +680,7 @@ public class RLE
 			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] != input[i - 1])
 				i++;
 			i--;
-			result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice(j..i));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice(j..i));
 		}
 		return result;
 	}
@@ -712,7 +712,7 @@ public class RLE
 			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
 				i++;
 			i--;
-			result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice((j * 3)..(i * 3)));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice((j * 3)..(i * 3)));
 		}
 		return result;
 	}

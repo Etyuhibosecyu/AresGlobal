@@ -240,19 +240,8 @@ public class ArithmeticDecoder : IDisposable
 	public static implicit operator ArithmeticDecoder(byte[] x) => new(x);
 }
 
-public struct ImageData
+public record struct ImageData(int Width, int Height, int RAlpha)
 {
-	public int Width { get; private set; }
-	public int Height { get; private set; }
-	public int RAlpha { get; private set; }
-
-	public ImageData(int width, int height, int rAlpha)
-	{
-		Width = width;
-		Height = height;
-		RAlpha = rAlpha;
-	}
-
 	public readonly void Deconstruct(out int Width, out int Height, out int RAlpha)
 	{
 		Width = this.Width;
@@ -263,23 +252,8 @@ public struct ImageData
 	public static implicit operator ImageData((int Width, int Height, int RAlpha) value) => new(value.Width, value.Height, value.RAlpha);
 }
 
-public struct HuffmanData
+public record struct HuffmanData(int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes = false)
 {
-	public int MaxFrequency { get; private set; }
-	public int FrequencyCount { get; private set; }
-	public List<uint> ArithmeticMap { get; private set; }
-	public List<Interval> UniqueList { get; private set; }
-	public bool SpaceCodes { get; private set; }
-
-	public HuffmanData(int maxFrequency, int frequencyCount, List<uint> arithmeticMap, List<Interval> uniqueList, bool spaceCodes = false)
-	{
-		MaxFrequency = maxFrequency;
-		FrequencyCount = frequencyCount;
-		ArithmeticMap = arithmeticMap;
-		UniqueList = uniqueList;
-		SpaceCodes = spaceCodes;
-	}
-
 	public readonly void Deconstruct(out int MaxFrequency, out int FrequencyCount, out List<uint> ArithmeticMap, out List<Interval> UniqueList, out bool SpaceCodes)
 	{
 		MaxFrequency = this.MaxFrequency;
@@ -294,19 +268,8 @@ public struct HuffmanData
 	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList, value.SpaceCodes);
 }
 
-public struct MethodDataUnit
+public record struct MethodDataUnit(uint R, uint Max, uint Threshold)
 {
-	public uint R { get; private set; }
-	public uint Max { get; private set; }
-	public uint Threshold { get; private set; }
-
-	public MethodDataUnit(uint r, uint max, uint threshold)
-	{
-		R = r;
-		Max = max;
-		Threshold = threshold;
-	}
-
 	public readonly void Deconstruct(out uint R, out uint Max, out uint Threshold)
 	{
 		R = this.R;
@@ -317,21 +280,8 @@ public struct MethodDataUnit
 	public static implicit operator MethodDataUnit((uint R, uint Max, uint Threshold) value) => new(value.R, value.Max, value.Threshold);
 }
 
-public struct LZData
+public record struct LZData(MethodDataUnit Dist, MethodDataUnit Length, uint UseSpiralLengths, MethodDataUnit SpiralLength)
 {
-	public MethodDataUnit Dist { get; private set; }
-	public MethodDataUnit Length { get; private set; }
-	public uint UseSpiralLengths { get; private set; }
-	public MethodDataUnit SpiralLength { get; private set; }
-
-	public LZData(MethodDataUnit dist, MethodDataUnit length, uint useSpiralLengths, MethodDataUnit spiralLength)
-	{
-		Dist = dist;
-		Length = length;
-		UseSpiralLengths = useSpiralLengths;
-		SpiralLength = spiralLength;
-	}
-
 	public readonly void Deconstruct(out MethodDataUnit Dist, out MethodDataUnit Length, out uint UseSpiralLengths, out MethodDataUnit SpiralLength)
 	{
 		Dist = this.Dist;
@@ -402,35 +352,4 @@ public class ArchaicHuffmanNode : G.IEnumerable<uint>
 }
 
 [DebuggerDisplay("({String}, {Space})")]
-public class Word
-{
-	public string String { get; private set; }
-	public bool Space { get; private set; }
-
-	public Word()
-	{
-		String = "";
-		Space = false;
-	}
-
-	public Word(string string_, bool space)
-	{
-		String = string_;
-		Space = space;
-	}
-
-	public override bool Equals(object? obj)
-	{
-		if (obj == null)
-			return false;
-		if (obj is not Word m)
-			return false;
-		return String == m.String;
-	}
-
-	public override int GetHashCode() => String.GetHashCode() ^ Space.GetHashCode();
-
-	public static bool operator ==(Word x, Word y) => y is not null && x.String == y.String && x.Space == y.Space;
-
-	public static bool operator !=(Word x, Word y) => !(x == y);
-}
+public record struct Word(string String, bool Space);
