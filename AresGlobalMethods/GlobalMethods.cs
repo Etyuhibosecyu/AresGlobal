@@ -480,7 +480,7 @@ public class LempelZiv
 		if (c.Length > 8)
 			result[0].Add(LempelZivSubdivided);
 		result.Insert(1 + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : pixels ? 2 : 0), c.SplitIntoEqual(8).Convert(x => new ShortIntervalList(x)));
-		lzData = (((uint)rDist, maxDist, thresholdDist), ((uint)rLength, maxLength, thresholdLength), useSpiralLengths, ((uint)rSpiralLength, maxSpiralLength, thresholdSpiralLength));
+		lzData = new(new((uint)rDist, maxDist, thresholdDist), new((uint)rLength, maxLength, thresholdLength), useSpiralLengths, new((uint)rSpiralLength, maxSpiralLength, thresholdSpiralLength));
 		return result;
 	}
 

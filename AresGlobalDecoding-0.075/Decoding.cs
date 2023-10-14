@@ -10,7 +10,7 @@ global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
 
-namespace AresGlobalMethods007;
+namespace AresGlobalMethods;
 
 public static class Decoding
 {

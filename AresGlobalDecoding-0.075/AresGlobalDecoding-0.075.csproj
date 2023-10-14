@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <RootNamespace>AresGlobalMethods007</RootNamespace>
+    <RootNamespace>AresGlobalMethods</RootNamespace>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
