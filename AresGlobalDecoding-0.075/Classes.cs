@@ -149,7 +149,7 @@ public class ArithmeticDecoder : IDisposable
 		return c;
 	}
 
-	public int ReadPart(SumSet<uint> set)
+	public int ReadPart<T>(SumSet<T> set)
 	{
 		uint ol = l, oh = h, divisor = (uint)set.ValuesSum;
 		if (divisor == 0)

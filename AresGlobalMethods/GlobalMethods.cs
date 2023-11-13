@@ -1,13 +1,10 @@
 ﻿global using AresGlobalMethods;
 global using Corlib.NStar;
 global using System;
-global using System.Runtime.InteropServices;
 global using System.Text;
-global using System.Threading;
 global using System.Threading.Tasks;
 global using UnsafeFunctions;
 global using G = System.Collections.Generic;
-global using static AresGlobalMethods.Decoding;
 global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
@@ -128,7 +125,7 @@ public class Huffman
 		var arithmeticMap = frequency.Convert(x => a += (uint)x);
 		Status[tn]++;
 		if (lz)
-			intervalsBase = GetBaseWithBuffer(arithmeticMap[^1]);
+			intervalsBase = GetBaseWithBuffer(arithmeticMap[^1], spaces);
 		var frequencyIntervals = arithmeticMap.Prepend(0).GetSlice(0, arithmeticMap.Length).NConvert((x, index) => new Interval(x, (uint)frequency[index], intervalsBase));
 		Status[tn]++;
 		Interval lzInterval = lz ? new(arithmeticMap[^1], intervalsBase - arithmeticMap[^1], intervalsBase) : new();
@@ -181,7 +178,7 @@ public class Huffman
 public class LempelZiv
 {
 	private readonly List<ShortIntervalList> input, result;
-	private readonly int tn, huffmanIndex;
+	private readonly int tn, huffmanIndex, threadsCount = Environment.ProcessorCount;
 	private readonly bool huffman, pixels, lw, cout, spaces;
 	private LZData lzData;
 	public const int LZDictionarySize = 32767;
@@ -228,30 +225,28 @@ public class LempelZiv
 		var combined = preIndexCodes.NPairs((x, y) => (ulong)x << 32 | y);
 		var indexCodesList = combined.PGroup(tn, new EComparer<ulong>((x, y) => x == y, x => ((int)(x >> 32)) << 7 ^ (int)x)).FilterInPlace(x => x.Group.Length >= 2);
 		combined.Dispose();
-		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.Sort());
+		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.NSort());
 		indexCodesList.Dispose();
-		Status[tn] = 0;
-		StatusMaximum[tn] = indexCodes.Sum(x => x.Length);
-		Current[tn] += ProgressBarStep;
 		var startKGlobal = 2;
-		Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo = new();
-		TreeSet<int> maxReached = new();
-		Dictionary<int, int> maxReachedLengths = new();
+		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>());
 		uint useSpiralLengths = 0;
 		var maxLevel = Max(BitsCount(LZDictionarySize) / 2 - 5, 0);
-		object lockObj = new();
+		Status[tn] = 0;
+		StatusMaximum[tn] = indexCodes.Sum(x => x.Length) * (maxLevel + 1);
+		Current[tn] += ProgressBarStep;
+		var lockObj = RedStarLinq.FillArray(threadsCount, _ => new object());
 		Parallel.ForEach(indexCodes, x => FindMatchesRecursive(x, 0));
 		complexCodes.Dispose();
 		preIndexCodes.Dispose();
 		secondaryCodes.Dispose();
-		return WriteLZ(input, lzStart, repeatsInfo, useSpiralLengths);
+		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToDictionary();
+		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
 		void FindMatchesRecursive(uint[] ic, int level)
 		{
 			if (level < maxLevel)
 			{
-				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray(index => ic[index]).Sort());
+				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray(index => ic[index]).NSort());
 				var nextCodes2 = nextCodes.JoinIntoSingle().ToHashSet();
-				ic = ic.Filter(x => !nextCodes2.Contains(x)).ToArray();
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
@@ -260,12 +255,13 @@ public class LempelZiv
 		}
 		void FindMatches(uint[] ic, int startK)
 		{
+			var nextTarget = 0;
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
-				if (maxReached.Length != 0 && Lock(lockObj, () => CreateVar(maxReached.IndexOfNotLess(iIC), out var mr) >= 1 && maxReachedLengths[maxReached[mr - 1]] > iIC - maxReached[mr - 1]))
+				if (iIC < nextTarget)
 					continue;
-				var matches = ic.GetSlice((Array.FindLastIndex(ic, i - 1, x => iIC - x >= LZDictionarySize) + 1)..i).Filter(jIC => iIC - jIC >= 2 && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, (int)jIC, startK) == startK));
+				var matches = ic.GetSlice((CreateVar(Array.BinarySearch(ic, 0, i, (uint)Max(iIC - LZDictionarySize, 0)), out var found) >= 0 ? found : ~found)..i).Filter(jIC => iIC - jIC >= 2 && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, (int)jIC, startK) == startK));
 				var ub = preIndexCodes.Length - iIC - 1;
 				if (matches.Length == 0 || ub < startK)
 					continue;
@@ -286,11 +282,12 @@ public class LempelZiv
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
+				{
+					nextTarget = lastMatch + k;
 					useSpiralLengths = 1;
-				if (k > ub || sl == ushort.MaxValue)
-					Lock(lockObj, () => (maxReached.Add(iIC), maxReachedLengths.TryAdd(iIC, k)));
+				}
 			}
 		}
 		void FindMatches2(uint[] ic, int k)
@@ -298,15 +295,13 @@ public class LempelZiv
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
-				if (maxReached.Length != 0 && Lock(lockObj, () => CreateVar(maxReached.IndexOfNotLess(iIC), out var mr) >= 1 && maxReachedLengths[maxReached[mr - 1]] > iIC - maxReached[mr - 1]))
-					continue;
 				var jIC = (int)ic[i - 1];
 				if (!(iIC - jIC is >= 2 and < LZDictionarySize && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, jIC, k) == k)))
 					continue;
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
@@ -323,28 +318,26 @@ public class LempelZiv
 		var combined = preIndexCodes.GetSlice().NCombine(preIndexCodes.GetSlice(1), preIndexCodes.GetSlice(2), (x, y, z) => ((uint)x << 8 | y) << 8 | z);
 		var indexCodesList = combined.PGroup(tn).FilterInPlace(x => x.Group.Length >= 2);
 		combined.Dispose();
-		var indexCodes = indexCodesList.NSort(x => x.Key).PToArray(col => col.Group.Sort());
+		var indexCodes = indexCodesList.NSort(x => x.Key).PToArray(col => col.Group.NSort());
 		indexCodesList.Dispose();
-		Status[tn] = 0;
-		StatusMaximum[tn] = indexCodes.Sum(x => x.Length);
-		Current[tn] += ProgressBarStep;
 		var startKGlobal = 3;
-		Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo = new();
-		TreeSet<int> maxReached = new();
-		Dictionary<int, int> maxReachedLengths = new();
+		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>());
 		uint useSpiralLengths = 0;
 		var maxLevel = Max(BitsCount(LZDictionarySize) / 2 - 5, 0);
-		object lockObj = new();
+		Status[tn] = 0;
+		StatusMaximum[tn] = indexCodes.Sum(x => x.Length) * (maxLevel + 1);
+		Current[tn] += ProgressBarStep;
+		var lockObj = RedStarLinq.FillArray(threadsCount, _ => new object());
 		Parallel.ForEach(indexCodes, x => FindMatchesRecursive(x, 0));
 		preIndexCodes.Dispose();
-		return WriteLZ(input, lzStart, repeatsInfo, useSpiralLengths);
+		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToDictionary();
+		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
 		void FindMatchesRecursive(uint[] ic, int level)
 		{
 			if (level < maxLevel)
 			{
-				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray(index => ic[index]).Sort());
+				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).Group(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray());
 				var nextCodes2 = nextCodes.JoinIntoSingle().ToHashSet();
-				ic = ic.Filter(x => !nextCodes2.Contains(x)).ToArray();
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
@@ -353,37 +346,31 @@ public class LempelZiv
 		}
 		void FindMatches(uint[] ic, int startK)
 		{
+			var nextTarget = 0;
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
-				if (maxReached.Length != 0 && Lock(lockObj, () => CreateVar(maxReached.IndexOfNotLess(iIC), out var mr) >= 1 && maxReachedLengths[maxReached[mr - 1]] > iIC - maxReached[mr - 1]))
+				if (iIC < nextTarget)
 					continue;
-				var matches = ic.GetSlice((Array.FindLastIndex(ic, i - 1, x => iIC - x >= LZDictionarySize) + 1)..i).Filter(jIC => iIC - jIC >= 2);
-				var ub = preIndexCodes.Length - iIC - 1;
-				if (matches.Length == 0 || ub < startK)
-					continue;
-				var lastMatch = (int)matches[^1];
-				var k = startK;
-				for (; k <= ub && matches.Length > 1; k++)
+				var matches = ic.GetSlice((CreateVar(Array.BinarySearch(ic, 0, i, (uint)Max(iIC - LZDictionarySize, 0)), out var found) >= 0 ? found : ~found)..(ic[i - 1] == ic[i] - 1 ? i - 1 : i));
+				var length = 0;
+				for (var j = matches.Length - 1; j >= 0; j--)
 				{
-					lastMatch = (int)matches[^1];
-					matches.FilterInPlace(jIC => preIndexCodes[iIC + k] == preIndexCodes[(int)(jIC + k)] && !(k > 65537 && k <= iIC - jIC));
-					if (k == ub || matches.Length == 0 || iIC - matches[^1] >= (iIC - lastMatch) << 3 && lastMatch - matches[^1] >= 64) break;
+					var jIC = matches[j];
+					if (iIC - jIC < 2)
+						continue;
+					var k = preIndexCodes.Compare(iIC + startK, preIndexCodes, (int)(jIC + startK)) + startK;
+					if (k - 2 <= length)
+						continue;
+					length = k - 2;
+					var sl = (ushort)Clamp(length / (iIC - jIC) - 1, 0, ushort.MaxValue);
+					UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - length - 2, 0), (ushort)Min(length, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+					if (sl > 0)
+					{
+						nextTarget = (int)jIC + k;
+						useSpiralLengths = 1;
+					}
 				}
-				if (matches.Length == 1)
-				{
-					lastMatch = (int)matches[^1];
-					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
-					k += preIndexCodes.Compare(iIC + k, preIndexCodes, lastMatch + k, ub2 - k + 1);
-				}
-				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
-					continue;
-				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
-				if (sl > 0)
-					useSpiralLengths = 1;
-				if (k > ub || sl == ushort.MaxValue)
-					Lock(lockObj, () => (maxReached.Add(iIC), maxReachedLengths.TryAdd(iIC, k)));
 			}
 		}
 		void FindMatches2(uint[] ic, int k)
@@ -391,35 +378,33 @@ public class LempelZiv
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
-				if (maxReached.Length != 0 && Lock(lockObj, () => CreateVar(maxReached.IndexOfNotLess(iIC), out var mr) >= 1 && maxReachedLengths[maxReached[mr - 1]] > iIC - maxReached[mr - 1]))
-					continue;
 				var jIC = (int)ic[i - 1];
 				if (iIC - jIC is < 2 or >= LZDictionarySize)
 					continue;
 				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, iIC + lzStart - 2, 0, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
 		}
 	}
 
-	public static void UpdateRepeatsInfo<T>(Dictionary<uint, (uint dist, T length, T spiralLength)> repeatsInfo, object lockObj, int key, uint localMaxLength, uint dist, T length, T sl, PrimitiveType type) where T : unmanaged
+	public static void UpdateRepeatsInfo<T>(Dictionary<uint, (uint dist, T length, T spiralLength)>[] repeatsInfo, object[] lockObj, int threadsCount, int key, uint dist, T length, T sl, PrimitiveType type) where T : unmanaged
 	{
-		if (repeatsInfo.ContainsKey((uint)key))
+		if (repeatsInfo[key % threadsCount].TryGetValue((uint)key, out var value))
 		{
-			if ((ToInt(length, type) + 2) * (ToInt(sl, type) + 1) - 1 > localMaxLength)
-				lock (lockObj)
-					repeatsInfo[(uint)key] = (dist, length, sl);
+			if ((ToInt(length, type) + 2) * (ToInt(sl, type) + 1) > (ToInt(value.length, type) + 2) * (ToInt(value.spiralLength, type) + 1))
+				lock (lockObj[key % threadsCount])
+					repeatsInfo[key % threadsCount][(uint)key] = (dist, length, sl);
 			return;
 		}
-		lock (lockObj)
+		lock (lockObj[key % threadsCount])
 		{
-			if (repeatsInfo.ContainsKey((uint)key))
+			if (repeatsInfo[key % threadsCount].ContainsKey((uint)key))
 				return;
-			repeatsInfo.TryAdd((uint)key, (dist, length, sl));
+			repeatsInfo[key % threadsCount].TryAdd((uint)key, (dist, length, sl));
 		}
 	}
 
@@ -471,7 +456,7 @@ public class LempelZiv
 			{
 				var x = input2[i][j];
 				var y = decoded[i][j];
-				if (!(x.Equals(y) || GetBaseWithBuffer(x.Base) == y.Base && x.Lower == y.Lower && x.Length == y.Length))
+				if (!(x.Equals(y) || GetBaseWithBuffer(x.Base, spaces) == y.Base && x.Lower == y.Lower && x.Length == y.Length))
 					throw new DecoderFallbackException();
 			}
 		if (input2.Length != decoded.Length)
@@ -515,7 +500,7 @@ public class LempelZiv
 			var localMaxLength = (iLength + 2) * (iSpiralLength + 1) - 2;
 			var iStart = (int)starts[i];
 			var oldBase = input[iStart][0].Base;
-			var newBase = GetBaseWithBuffer(oldBase);
+			var newBase = GetBaseWithBuffer(oldBase, spaces);
 			statesNumLog1 = 0;
 			if (CreateVar(elementsReplaced.IndexOf(true, iStart, Min((int)localMaxLength + 3, elementsReplaced.Length - iStart)), out var replacedIndex) != -1)
 			{
@@ -575,7 +560,7 @@ public class LempelZiv
 			if (!elementsReplaced[i] && (i == result.Length - 1 || !elementsReplaced[i + 1]))
 			{
 				var first = result[i][0];
-				var newBase = GetBaseWithBuffer(first.Base);
+				var newBase = GetBaseWithBuffer(first.Base, spaces);
 				result[i] = !pixels && newBase == 269 ? ByteIntervals2[(int)first.Lower] : new(result[i]) { [0] = new(first.Lower, first.Length, newBase) };
 			}
 		});

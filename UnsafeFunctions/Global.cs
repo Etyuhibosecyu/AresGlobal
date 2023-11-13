@@ -39,7 +39,6 @@ public static unsafe class Global
 	public static Interval LengthsApplied { get; } = new(0, 15, 15);
 	public static Interval BWTApplied { get; } = new(0, 16, 16);
 	public static Interval LWApplied { get; } = new(0, 17, 17);
-	public static Interval RepeatsApplied { get; } = new(224, 225);
 	public static Interval RepeatsNotApplied { get; } = new(0, 224, 225);
 	public static Interval LempelZivSubdivided { get; } = new(0, 20, 20);
 	public static Interval HuffmanDummyApplied { get; } = new(0, 21, 21);
@@ -286,8 +285,8 @@ public static unsafe class Global
 		return list;
 	}
 
-	public static uint GetBaseWithBuffer(uint oldBase) => oldBase + GetBufferInterval(oldBase);
-	public static uint GetBufferInterval(uint oldBase) => Max((oldBase + 10) / 20, 1);
+	public static uint GetBaseWithBuffer(uint oldBase, bool words = false) => oldBase + GetBufferInterval(oldBase, words);
+	public static uint GetBufferInterval(uint oldBase, bool words = false) => Max(words ? (oldBase + 10) / 20 : (uint)Sqrt(oldBase), 1);
 
 	/// <summary>Считает количество бит в числе. Логарифм для этой цели использовать невыгодно, так как это достаточно медленная операция.</summary>
 	/// <param name="x">Исходное число.</param>

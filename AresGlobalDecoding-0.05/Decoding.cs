@@ -105,13 +105,10 @@ public class Decoding
 			{
 				if (lzRSpiralLength == 0)
 					sl = compressedList[i][j2 + 1].Lower;
+				else if (lzRSpiralLength == 1 != (compressedList[i][j2 + 1].Lower == compressedList[i][j2 + 1].Base - 1))
+					sl = compressedList[i][j2 + lzRSpiralLength].Lower;
 				else
-				{
-					if (lzRSpiralLength == 1 != (compressedList[i][j2 + 1].Lower == compressedList[i][j2 + 1].Base - 1))
-						sl = compressedList[i][j2 + lzRSpiralLength].Lower;
-					else
-						sl = (uint)(compressedList[i][j2 + 3 - lzRSpiralLength].Lower + lzThresholdSpiralLength + 2 - lzRSpiralLength);
-				}
+					sl = (uint)(compressedList[i][j2 + 3 - lzRSpiralLength].Lower + lzThresholdSpiralLength + 2 - lzRSpiralLength);
 			}
 			else
 				sl = 0;
