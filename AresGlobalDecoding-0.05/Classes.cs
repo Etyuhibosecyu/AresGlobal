@@ -8,10 +8,10 @@ namespace AresGlobalMethods005;
 [DebuggerDisplay("Length = {Length}")]
 public class ArithmeticDecoder : IDisposable
 {
-	private readonly BitList bits;
-	private const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
-	private uint l = l0, h = h0, value;
-	private int pos;
+	protected readonly BitList bits;
+	protected const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
+	protected uint l = l0, h = h0, value;
+	protected int pos;
 
 	public int Length => bits.Length;
 
@@ -66,6 +66,20 @@ public class ArithmeticDecoder : IDisposable
 		return c;
 	}
 
+	public int ReadPart(SumList sl)
+	{
+		uint ol = l, oh = h, divisor = (uint)sl.ValuesSum;
+		if (divisor == 0)
+			return 0;
+		var freq = (uint)((((ulong)value - ol + 1) * divisor - 1) / ((ulong)oh - ol + 1));
+		var c = sl.IndexOfNotGreaterSum(freq);
+		var leftSum = (uint)sl.GetLeftValuesSum(c, out var frequency);
+		l = (uint)(ol + leftSum * ((ulong)oh - ol + 1) / divisor);
+		h = (uint)(ol + (uint)(leftSum + frequency) * ((ulong)oh - ol + 1) / divisor - 1);
+		ReadInternal();
+		return c;
+	}
+
 	public bool ReadFibonacci(out uint value)
 	{
 		value = 0;
@@ -89,7 +103,7 @@ public class ArithmeticDecoder : IDisposable
 		return false;
 	}
 
-	private void ReadInternal()
+	protected void ReadInternal()
 	{
 		while (true)
 		{
