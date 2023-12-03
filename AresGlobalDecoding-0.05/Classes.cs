@@ -52,7 +52,7 @@ public class ArithmeticDecoder : IDisposable
 		return c;
 	}
 
-	public int ReadPart(SumSet<uint> set)
+	public int ReadPart<T>(SumSet<T> set)
 	{
 		uint ol = l, oh = h, divisor = (uint)set.ValuesSum;
 		if (divisor == 0)
@@ -159,16 +159,16 @@ public record struct HuffmanData(int MaxFrequency, int FrequencyCount, List<uint
 	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList, value.SpaceCodes);
 }
 
-public record struct MethodDataUnit(uint R, uint Max, uint Threshold)
+public record struct MethodDataUnit(int R, uint Max, uint Threshold)
 {
-	public readonly void Deconstruct(out uint R, out uint Max, out uint Threshold)
+	public readonly void Deconstruct(out int R, out uint Max, out uint Threshold)
 	{
 		R = this.R;
 		Max = this.Max;
 		Threshold = this.Threshold;
 	}
 
-	public static implicit operator MethodDataUnit((uint R, uint Max, uint Threshold) value) => new(value.R, value.Max, value.Threshold);
+	public static implicit operator MethodDataUnit((int R, uint Max, uint Threshold) value) => new(value.R, value.Max, value.Threshold);
 }
 
 public record struct LZData(MethodDataUnit Dist, MethodDataUnit Length, uint UseSpiralLengths, MethodDataUnit SpiralLength)

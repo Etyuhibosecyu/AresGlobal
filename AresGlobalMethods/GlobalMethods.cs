@@ -440,7 +440,7 @@ public class LempelZiv
 		}
 #if DEBUG
 		var input2 = input.Skip(lzStart - 2);
-		var decoded = result.GetRange(lzStart - 2).DecodeLempelZiv(true, rDist, thresholdDist, rLength, thresholdLength, useSpiralLengths, rSpiralLength, thresholdSpiralLength, tn);
+		var decoded = new AresGlobalMethods005.LempelZivDec(result.GetRange(lzStart - 2), true, new(new(rDist, 0, thresholdDist), new(rLength, 0, thresholdLength), useSpiralLengths, new(rSpiralLength, 0, thresholdSpiralLength)), tn).Decode();
 		for (var i = 0; i < input2.Length && i < decoded.Length; i++)
 			for (var j = 0; j < input2[i].Length && j < decoded[i].Length; j++)
 			{
