@@ -211,12 +211,9 @@ public unsafe class ShortIntervalList : IDisposable, IList<Interval>
 			}
 	}
 
-	public struct Enumerator : G.IEnumerator<Interval>
+	public struct Enumerator(ShortIntervalList list) : G.IEnumerator<Interval>
 	{
-		private readonly ShortIntervalList _list;
 		private byte _index;
-
-		public Enumerator(ShortIntervalList list) => _list = list;
 
 		public Interval Current { get; private set; } = default!;
 
@@ -228,13 +225,13 @@ public unsafe class ShortIntervalList : IDisposable, IList<Interval>
 
 		public bool MoveNext()
 		{
-			if (_index >= _list._size)
+			if (_index >= list._size)
 				return false;
-			fixed (Interval* ptr = &_list.Item1)
+			fixed (Interval* ptr = &list.Item1)
 				Current = _index switch
 				{
 					< partSize => ptr[_index],
-					< partSize * 2 => _list.secondPart[_index - partSize],
+					< partSize * 2 => list.secondPart[_index - partSize],
 					_ => default!,
 				};
 			_index++;

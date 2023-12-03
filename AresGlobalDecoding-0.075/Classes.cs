@@ -12,7 +12,7 @@ public class ArithmeticEncoder : IDisposable
 	private const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
 	private uint l = l0, h = h0;
 	private int bitsToFollow;
-	private static readonly BitList[] shortLists = RedStarLinq.Fill(10, index => new BitList(index + 1, false)).Concat(RedStarLinq.Fill(10, index => new BitList(index + 1, true))).ToArray();
+	private static readonly BitList[] shortLists = [.. RedStarLinq.Fill(10, index => new BitList(index + 1, false)), .. RedStarLinq.Fill(10, index => new BitList(index + 1, true))];
 
 	public int Length => bits.Length;
 

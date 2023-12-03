@@ -16,7 +16,7 @@ public static class Decoding
 {
 	public static List<ShortIntervalList> DecodeLempelZiv(this List<ShortIntervalList> compressedList, bool lz, int lzRDist, uint lzThresholdDist, int lzRLength, uint lzThresholdLength, uint lzUseSpiralLengths, int lzRSpiralLength, uint lzThresholdSpiralLength, int tn)
 	{
-		List<ShortIntervalList> result = new();
+		List<ShortIntervalList> result = [];
 		if (!lz)
 			return compressedList;
 		Status[tn] = 0;
@@ -119,7 +119,7 @@ public static class Decoding
 
 	public static NList<byte> DecodeRLE3(this NList<byte> byteList)
 	{
-		NList<byte> result = new();
+		NList<byte> result = [];
 		Status[0] = 0;
 		StatusMaximum[0] = byteList.Length;
 		NList<byte> element;
@@ -162,7 +162,7 @@ public static class Decoding
 
 	public static NList<byte> DecodeRLE(this NList<byte> byteList)
 	{
-		NList<byte> result = new();
+		NList<byte> result = [];
 		Status[0] = 0;
 		StatusMaximum[0] = byteList.Length;
 		byte element;

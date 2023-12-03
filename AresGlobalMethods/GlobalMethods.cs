@@ -16,7 +16,7 @@ public static class Global
 	public static byte[] WorkUpDoubleList(List<ShortIntervalList> input, int tn)
 	{
 		if (input.Length == 0)
-			return Array.Empty<byte>();
+			return [];
 		ArithmeticEncoder ar = new();
 		ar.WriteCount((uint)input.Length);
 		Current[tn] = 0;
@@ -39,7 +39,7 @@ public static class Global
 	public static byte[] WorkUpTripleList(List<List<ShortIntervalList>> input, int tn)
 	{
 		if (input.Any(x => x.Length == 0))
-			return Array.Empty<byte>();
+			return [];
 		ArithmeticEncoder ar = new();
 		Current[tn] = 0;
 		CurrentMaximum[tn] = ProgressBarStep * 2;
@@ -71,18 +71,8 @@ public static class Global
 	}
 }
 
-public class Huffman
+public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn)
 {
-	private readonly List<ShortIntervalList> input, result;
-	private readonly int tn;
-
-	public Huffman(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn)
-	{
-		this.input = input;
-		this.result = result;
-		this.tn = tn;
-	}
-
 	public List<ShortIntervalList> Encode()
 	{
 		if (input.Length == 0)
@@ -144,7 +134,7 @@ public class Huffman
 		arithmeticMap.Dispose();
 		frequencyIntervals.Dispose();
 		Status[tn]++;
-		List<Interval> c = new();
+		List<Interval> c = [];
 		c.WriteCount((uint)maxFrequency - 1);
 		c.WriteCount((uint)frequencyTable.Length - 1);
 		Status[tn] = 0;
@@ -430,7 +420,7 @@ public class LempelZiv
 		result.FilterInPlace((x, index) => index == 0 || !elementsReplaced[index]);
 		elementsReplaced.Dispose();
 		result[0].Add(LempelZivApplied);
-		List<Interval> c = new() { new Interval((uint)rDist, 3) };
+		List<Interval> c = [new Interval((uint)rDist, 3)];
 		c.WriteCount(maxDist);
 		if (rDist != 0)
 			c.Add(new(thresholdDist, maxDist + 1));
@@ -522,7 +512,7 @@ public class LempelZiv
 				statesNumLog2 += StatesNumLogSum(iSpiralLength, rSpiralLength, ToUInt(maxSpiralLength, type), thresholdSpiralLength);
 			if (statesNumLog1 <= statesNumLog2)
 				continue;
-			ShortIntervalList b = new() { new(oldBase, newBase - oldBase, newBase) };
+			ShortIntervalList b = [new(oldBase, newBase - oldBase, newBase)];
 			WriteLZValue(b, iLength, rLength, ToUInt(maxLength, type), thresholdLength);
 			var maxDist2 = Min(maxDist, (uint)(iStart - iLength - lzStart));
 			if (useSpiralLengths == 0)
@@ -618,7 +608,7 @@ public class LempelZiv
 	{
 		result.Replace(input);
 		result[0] = new(result[0]) { LempelZivDummyApplied };
-		List<Interval> list = new() { new(0, 3) };
+		List<Interval> list = [new(0, 3)];
 		list.WriteCount(0);
 		list.Add(new(0, 3));
 		list.WriteCount(0, 16);
@@ -628,20 +618,11 @@ public class LempelZiv
 	}
 }
 
-public class RLE
+public class RLE(NList<byte> input, int tn)
 {
-	private readonly NList<byte> input;
-	private readonly int tn;
-
-	public RLE(NList<byte> input, int tn)
-	{
-		this.input = input;
-		this.tn = tn;
-	}
-
 	public NList<byte> Encode()
 	{
-		NList<byte> result = new();
+		NList<byte> result = [];
 		if (input.Length < 1)
 			return input;
 		Current[tn] = 0;
@@ -658,21 +639,21 @@ public class RLE
 				i++;
 			if (i != j)
 			{
-				result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j - 1) } : new[] { (byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1)) });
+				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [(byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1))]);
 				continue;
 			}
 			j = i;
 			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] != input[i - 1])
 				i++;
 			i--;
-			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice(j..i));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1))]).AddRange(input.GetSlice(j..i));
 		}
 		return result;
 	}
 
 	public NList<byte> RLE3()
 	{
-		NList<byte> result = new();
+		NList<byte> result = [];
 		if (input.Length < 3 || input.Length % 3 != 0)
 			return input;
 		var length = input.Length / 3;
@@ -690,14 +671,14 @@ public class RLE
 				i++;
 			if (i != j)
 			{
-				result.AddRange(i - j < ValuesInByte >> 1 ? new[] { (byte)(i - j - 1) } : new[] { (byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1)) });
+				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [(byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j - (ValuesInByte >> 1))]);
 				continue;
 			}
 			j = i;
 			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
 				i++;
 			i--;
-			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? new[] { (byte)(i - j + (ValuesInByte >> 1)) } : new[] { (byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1)) }).AddRange(input.GetSlice((j * 3)..(i * 3)));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), (byte)(i - j + 1 - (ValuesInByte >> 1))]).AddRange(input.GetSlice((j * 3)..(i * 3)));
 		}
 		return result;
 	}
