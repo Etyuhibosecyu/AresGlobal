@@ -76,14 +76,13 @@ public static unsafe class Global
 	public static List<(uint[] Group, TSource Key)> PGroup<TSource>(this G.IList<TSource> source, int tn, G.IEqualityComparer<TSource>? comparer = null)
 	{
 		var lockObj = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
-		var lockObj2 = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
-		var count = source.Count;
-		var innerIndexes = (int*)Marshal.AllocHGlobal(sizeof(int) * count);
-		FillMemory(innerIndexes, count, 0);
+		var length = source.Count;
+		var innerIndexes = (int*)Marshal.AllocHGlobal(sizeof(int) * length);
+		FillMemory(innerIndexes, length, 0);
 		ParallelHashSet<TSource> hs = new(comparer);
 		Status[tn] = 0;
-		StatusMaximum[tn] = count;
-		Parallel.For(0, count, i =>
+		StatusMaximum[tn] = length;
+		Parallel.For(0, length, i =>
 		{
 			hs.TryAdd(source[i], out innerIndexes[i]);
 			Status[tn]++;
@@ -91,9 +90,9 @@ public static unsafe class Global
 		var dicKeys = hs.ToArray();
 		var innerCount = (int*)Marshal.AllocHGlobal(sizeof(int) * hs.Length);
 		FillMemory(innerCount, hs.Length, 0);
-		var innerIndexes2 = (int*)Marshal.AllocHGlobal(sizeof(int) * count);
-		FillMemory(innerIndexes2, count, 0);
-		Parallel.For(0, count, i =>
+		var innerIndexes2 = (int*)Marshal.AllocHGlobal(sizeof(int) * length);
+		FillMemory(innerIndexes2, length, 0);
+		Parallel.For(0, length, i =>
 		{
 			int c;
 			lock (lockObj[innerIndexes[i] % lockObj.Length])
@@ -102,42 +101,7 @@ public static unsafe class Global
 		});
 		var result = RedStarLinq.EmptyList<(uint[] Group, TSource Key)>(hs.Length);
 		Parallel.For(0, hs.Length, i => result[i] = (new uint[innerCount[i]], dicKeys[i]));
-		Parallel.For(0, count, i => result[innerIndexes[i]].Group[innerIndexes2[i]] = (uint)i);
-		Marshal.FreeHGlobal((IntPtr)innerCount);
-		Marshal.FreeHGlobal((IntPtr)innerIndexes2);
-		Marshal.FreeHGlobal((IntPtr)innerIndexes);
-		return result;
-	}
-
-	public static List<(uint[] Group, TSource Key)> PGroup<TSource>(this NList<TSource> source, int tn, G.IEqualityComparer<TSource>? comparer = null) where TSource : unmanaged
-	{
-		var lockObj = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
-		var count = source.Length;
-		var innerIndexes = (int*)Marshal.AllocHGlobal(sizeof(int) * count);
-		FillMemory(innerIndexes, count, 0);
-		ParallelHashSet<TSource> hs = new(comparer);
-		Status[tn] = 0;
-		StatusMaximum[tn] = count;
-		Parallel.For(0, count, i =>
-		{
-			hs.TryAdd(source[i], out innerIndexes[i]);
-			Status[tn]++;
-		});
-		var dicKeys = hs.ToArray();
-		var innerCount = (int*)Marshal.AllocHGlobal(sizeof(int) * hs.Length);
-		FillMemory(innerCount, hs.Length, 0);
-		var innerIndexes2 = (int*)Marshal.AllocHGlobal(sizeof(int) * count);
-		FillMemory(innerIndexes2, count, 0);
-		Parallel.For(0, count, i =>
-		{
-			int c;
-			lock (lockObj[innerIndexes[i] % lockObj.Length])
-				c = innerCount[innerIndexes[i]]++;
-			innerIndexes2[i] = c;
-		});
-		var result = RedStarLinq.EmptyList<(uint[] Group, TSource Key)>(hs.Length);
-		Parallel.For(0, hs.Length, i => result[i] = (new uint[innerCount[i]], dicKeys[i]));
-		Parallel.For(0, count, i => result[innerIndexes[i]].Group[innerIndexes2[i]] = (uint)i);
+		Parallel.For(0, length, i => result[innerIndexes[i]].Group[innerIndexes2[i]] = (uint)i);
 		Marshal.FreeHGlobal((IntPtr)innerCount);
 		Marshal.FreeHGlobal((IntPtr)innerIndexes2);
 		Marshal.FreeHGlobal((IntPtr)innerIndexes);

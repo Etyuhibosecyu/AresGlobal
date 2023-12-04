@@ -446,7 +446,7 @@ public class LempelZiv
 			{
 				var x = input2[i][j];
 				var y = decoded[i][j];
-				if (!(x.Equals(y) || GetBaseWithBuffer(x.Base, spaces) == y.Base && x.Lower == y.Lower && x.Length == y.Length))
+				if (!(x.Equals(y) || GetBaseWithBuffer(x.Base, spaces || pixels) == y.Base && x.Lower == y.Lower && x.Length == y.Length))
 					throw new DecoderFallbackException();
 			}
 		if (input2.Length != decoded.Length)
@@ -490,7 +490,7 @@ public class LempelZiv
 			var localMaxLength = (iLength + 2) * (iSpiralLength + 1) - 2;
 			var iStart = (int)starts[i];
 			var oldBase = input[iStart][0].Base;
-			var newBase = GetBaseWithBuffer(oldBase, spaces);
+			var newBase = GetBaseWithBuffer(oldBase, spaces || pixels);
 			statesNumLog1 = 0;
 			if (CreateVar(elementsReplaced.IndexOf(true, iStart, Min((int)localMaxLength + 3, elementsReplaced.Length - iStart)), out var replacedIndex) != -1)
 			{
@@ -550,7 +550,7 @@ public class LempelZiv
 			if (!elementsReplaced[i] && (i == result.Length - 1 || !elementsReplaced[i + 1]))
 			{
 				var first = result[i][0];
-				var newBase = GetBaseWithBuffer(first.Base, spaces);
+				var newBase = GetBaseWithBuffer(first.Base, spaces || pixels);
 				result[i] = !pixels && newBase == 269 ? ByteIntervals2[(int)first.Lower] : new(result[i]) { [0] = new(first.Lower, first.Length, newBase) };
 			}
 		});
