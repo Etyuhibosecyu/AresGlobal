@@ -20,7 +20,7 @@ public class ArithmeticEncoder : IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	public void Write(int c, List<uint> map)
+	public void Write(int c, NList<uint> map)
 	{
 		uint ol = l, oh = h;
 		l = (uint)(ol + ((c == 0) ? 0 : map[c - 1]) * ((ulong)oh - ol + 1) / map[^1]);
@@ -112,7 +112,7 @@ public record struct ImageData(int Width, int Height, int RAlpha)
 	public static implicit operator ImageData((int Width, int Height, int RAlpha) value) => new(value.Width, value.Height, value.RAlpha);
 }
 
-public record struct HuffmanData(int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes = false);
+public record struct HuffmanData(int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes = false);
 
 public record struct MethodDataUnit(uint R, uint Max, uint Threshold);
 

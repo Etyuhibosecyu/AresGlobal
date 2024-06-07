@@ -38,7 +38,7 @@ public class ArithmeticDecoder : IDisposable
 		return c;
 	}
 
-	public int ReadPart(List<uint> quickMap)
+	public int ReadPart(NList<uint> quickMap)
 	{
 		uint ol = l, oh = h, divisor = quickMap[^1];
 		if (divisor == 0)
@@ -143,9 +143,9 @@ public class ArithmeticDecoder : IDisposable
 	public static implicit operator ArithmeticDecoder(byte[] x) => new(x);
 }
 
-public record struct HuffmanData(int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes = false)
+public record struct HuffmanData(int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList, bool SpaceCodes = false)
 {
-	public readonly void Deconstruct(out int MaxFrequency, out int FrequencyCount, out List<uint> ArithmeticMap, out List<Interval> UniqueList, out bool SpaceCodes)
+	public readonly void Deconstruct(out int MaxFrequency, out int FrequencyCount, out NList<uint> ArithmeticMap, out NList<Interval> UniqueList, out bool SpaceCodes)
 	{
 		MaxFrequency = this.MaxFrequency;
 		FrequencyCount = this.FrequencyCount;
@@ -154,9 +154,9 @@ public record struct HuffmanData(int MaxFrequency, int FrequencyCount, List<uint
 		SpaceCodes = this.SpaceCodes;
 	}
 
-	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList);
+	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList);
 
-	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, List<uint> ArithmeticMap, List<Interval> UniqueList, bool SpaceCodes) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList, value.SpaceCodes);
+	public static implicit operator HuffmanData((int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList, bool SpaceCodes) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList, value.SpaceCodes);
 }
 
 public record struct MethodDataUnit(int R, uint Max, uint Threshold)

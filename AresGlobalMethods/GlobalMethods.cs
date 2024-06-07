@@ -1,6 +1,7 @@
 ﻿global using AresGlobalMethods;
 global using Corlib.NStar;
 global using System;
+global using System.IO;
 global using System.Text;
 global using System.Threading.Tasks;
 global using UnsafeFunctions;
@@ -209,7 +210,7 @@ public class LempelZiv
 			_ => (x[0].GetHashCode() << 7 ^ x[1].GetHashCode()) << 7 ^ x[^1].GetHashCode(),
 		}).NConvert(x => ((uint)x, 0u)) : input.GetSlice(lzStart - 2).NConvert((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
 		var (preIndexCodes, secondaryCodes) = complexCodes.NBreak();
-		var secondaryCodesActive = secondaryCodes.Any(x => x is not 0);
+		var secondaryCodesActive = secondaryCodes.Any(x => x != 0);
 		Current[tn] = 0;
 		CurrentMaximum[tn] = ProgressBarStep * 2;
 		var combined = preIndexCodes.NPairs((x, y) => (ulong)x << 32 | y);
@@ -229,14 +230,13 @@ public class LempelZiv
 		complexCodes.Dispose();
 		preIndexCodes.Dispose();
 		secondaryCodes.Dispose();
-		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToDictionary();
+		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToNList();
 		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
 		void FindMatchesRecursive(uint[] ic, int level)
 		{
 			if (level < maxLevel)
 			{
 				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray(index => ic[index]).NSort());
-				var nextCodes2 = nextCodes.JoinIntoSingle().ToHashSet();
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
@@ -269,7 +269,7 @@ public class LempelZiv
 					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
 					k += complexCodes.Compare(iIC + k, complexCodes, lastMatch + k, ub2 - k + 1);
 				}
-				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
+				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
@@ -288,7 +288,8 @@ public class LempelZiv
 				var jIC = (int)ic[i - 1];
 				if (!(iIC - jIC is >= 2 and < LZDictionarySize && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, jIC, k) == k)))
 					continue;
-				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
+				double sum = 0;
+				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (sum += x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k)))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
@@ -320,14 +321,13 @@ public class LempelZiv
 		var lockObj = RedStarLinq.FillArray(threadsCount, _ => new object());
 		Parallel.ForEach(indexCodes, x => FindMatchesRecursive(x, 0));
 		preIndexCodes.Dispose();
-		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToDictionary();
+		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToNList();
 		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
 		void FindMatchesRecursive(uint[] ic, int level)
 		{
 			if (level < maxLevel)
 			{
 				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).Group(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray());
-				var nextCodes2 = nextCodes.JoinIntoSingle().ToHashSet();
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
@@ -346,10 +346,10 @@ public class LempelZiv
 				var length = 0;
 				for (var j = matches.Length - 1; j >= 0; j--)
 				{
-					var jIC = matches[j];
+					var jIC = (int)matches[j];
 					if (iIC - jIC < 2)
 						continue;
-					var k = preIndexCodes.Compare(iIC + startK, preIndexCodes, (int)(jIC + startK)) + startK;
+					var k = preIndexCodes.Compare(iIC + startK, preIndexCodes, jIC + startK) + startK;
 					if (k - 2 <= length)
 						continue;
 					length = k - 2;
@@ -357,7 +357,7 @@ public class LempelZiv
 					UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - length - 2, 0), (ushort)Min(length, iIC - jIC - 2), sl, PrimitiveType.UShortType);
 					if (sl > 0)
 					{
-						nextTarget = (int)jIC + k;
+						nextTarget = jIC + k;
 						useSpiralLengths = 1;
 					}
 				}
@@ -371,7 +371,8 @@ public class LempelZiv
 				var jIC = (int)ic[i - 1];
 				if (iIC - jIC is < 2 or >= LZDictionarySize)
 					continue;
-				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log(y.Base) - Log(y.Length))) < Log(21) + Log(LZDictionarySize) + Log(k))
+				double sum = 0;
+				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (sum += x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k)))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
@@ -398,7 +399,7 @@ public class LempelZiv
 		}
 	}
 
-	private List<ShortIntervalList> WriteLZ(List<ShortIntervalList> input, int lzStart, Dictionary<uint, (uint dist, ushort length, ushort spiralLength)> repeatsInfo, uint useSpiralLengths)
+	private List<ShortIntervalList> WriteLZ(List<ShortIntervalList> input, int lzStart, NList<G.KeyValuePair<uint, (uint dist, ushort length, ushort spiralLength)>> repeatsInfo, uint useSpiralLengths)
 	{
 		if (repeatsInfo.Length == 0)
 			return LempelZivDummy(input);
@@ -459,9 +460,9 @@ public class LempelZiv
 		return result;
 	}
 
-	public static void LZRequisites<T>(int inputLength, int multiplier, Dictionary<uint, (uint dist, T length, T spiralLength)> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList2, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
+	public static void LZRequisites<T>(int inputLength, int multiplier, NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList2, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
 	{
-		var repeatsInfoList = repeatsInfo.ToNList().Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
+		var repeatsInfoList = repeatsInfo.Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
 		var boundIndex2 = boundIndex = repeatsInfoList.FindIndex(x => (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) < multiplier * 10);
 		if (boundIndex == -1)
 			boundIndex2 = boundIndex = repeatsInfoList.Length;

@@ -47,32 +47,6 @@ public static unsafe class Global
 	public static List<ShortIntervalList> ByteIntervals2 { get; } = RedStarLinq.Fill(ValuesInByte, index => new ShortIntervalList() { new Interval((uint)index, 269) });
 	public static uint[] FibonacciSequence { get; } = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, 2178309, 3524578, 5702887, 9227465, 14930352, 24157817, 39088169, 63245986, 102334155, 165580141, 267914296, 433494437, 701408733, 1134903170, 1836311903, 2971215073];
 
-	public class IntListComparer : G.IComparer<List<int>>
-	{
-		public int Compare(List<int>? x, List<int>? y)
-		{
-			if (x == null && y == null)
-				return 0;
-			else if (x == null)
-				return 1;
-			else if (y == null)
-				return -1;
-			var n = Min(x.Length, y.Length);
-			for (var i = 0; i < n; i++)
-			{
-				if (x[i] > y[i])
-					return 1;
-				else if (x[i] < y[i])
-					return -1;
-			}
-			if (x.Length > y.Length)
-				return 1;
-			else if (x.Length < y.Length)
-				return -1;
-			return 0;
-		}
-	}
-
 	public static List<(uint[] Group, TSource Key)> PGroup<TSource>(this G.IList<TSource> source, int tn, G.IEqualityComparer<TSource>? comparer = null)
 	{
 		var lockObj = RedStarLinq.FillArray(Environment.ProcessorCount, x => new object());
