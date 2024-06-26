@@ -1,18 +1,7 @@
-﻿global using Corlib.NStar;
-global using System;
-global using System.Runtime.InteropServices;
-global using System.Text;
-global using System.Threading;
-global using System.Threading.Tasks;
-global using UnsafeFunctions;
-global using G = System.Collections.Generic;
-global using static Corlib.NStar.Extents;
-global using static System.Math;
-global using static UnsafeFunctions.Global;
+﻿
+namespace AresGlobalMethods;
 
-namespace AresGlobalMethods007;
-
-public static class Decoding
+public static class DecodingExtents
 {
 	public static List<ShortIntervalList> DecodeLempelZiv(this List<ShortIntervalList> compressedList, bool lz, int lzRDist, uint lzThresholdDist, int lzRLength, uint lzThresholdLength, uint lzUseSpiralLengths, int lzRSpiralLength, uint lzThresholdSpiralLength, int tn)
 	{
@@ -201,4 +190,14 @@ public static class Decoding
 		}
 		return result;
 	}
+
+	public static uint ReadCount(this ArithmeticDecoder ar, uint maxT = 31)
+	{
+		var temp = (int)ar.ReadEqual(maxT);
+		var read = ar.ReadEqual((uint)1 << Max(temp, 1));
+		return read + ((temp == 0) ? 0 : (uint)1 << Max(temp, 1));
+	}
+
+	public static uint GetBaseWithBuffer(uint oldBase) => oldBase + GetBufferInterval(oldBase);
+	public static uint GetBufferInterval(uint oldBase) => Max((oldBase + 10) / 20, 1);
 }

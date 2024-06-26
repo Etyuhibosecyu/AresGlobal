@@ -1,7 +1,7 @@
 ﻿
-namespace AresGlobalMethods005;
+namespace AresGlobalMethods;
 
-public class LempelZivDec(List<ShortIntervalList> compressedList, bool lz, LZData lzData, int tn)
+public class LempelZivDec(List<ShortIntervalList> compressedList, bool lz, LZDataOld lzData, int tn)
 {
 	public List<ShortIntervalList> Decode()
 	{
@@ -105,4 +105,45 @@ public class LempelZivDec(List<ShortIntervalList> compressedList, bool lz, LZDat
 		}
 		return result;
 	}
+}
+
+public record struct HuffmanDataOld(int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList, bool SpaceCodes = false)
+{
+	public readonly void Deconstruct(out int MaxFrequency, out int FrequencyCount, out NList<uint> ArithmeticMap, out NList<Interval> UniqueList, out bool SpaceCodes)
+	{
+		MaxFrequency = this.MaxFrequency;
+		FrequencyCount = this.FrequencyCount;
+		ArithmeticMap = this.ArithmeticMap;
+		UniqueList = this.UniqueList;
+		SpaceCodes = this.SpaceCodes;
+	}
+
+	public static implicit operator HuffmanDataOld((int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList);
+
+	public static implicit operator HuffmanDataOld((int MaxFrequency, int FrequencyCount, NList<uint> ArithmeticMap, NList<Interval> UniqueList, bool SpaceCodes) value) => new(value.MaxFrequency, value.FrequencyCount, value.ArithmeticMap, value.UniqueList, value.SpaceCodes);
+}
+
+public record struct MethodDataUnitOld(int R, uint Max, uint Threshold)
+{
+	public readonly void Deconstruct(out int R, out uint Max, out uint Threshold)
+	{
+		R = this.R;
+		Max = this.Max;
+		Threshold = this.Threshold;
+	}
+
+	public static implicit operator MethodDataUnitOld((int R, uint Max, uint Threshold) value) => new(value.R, value.Max, value.Threshold);
+}
+
+public record struct LZDataOld(MethodDataUnitOld Dist, MethodDataUnitOld Length, uint UseSpiralLengths, MethodDataUnitOld SpiralLength)
+{
+	public readonly void Deconstruct(out MethodDataUnitOld Dist, out MethodDataUnitOld Length, out uint UseSpiralLengths, out MethodDataUnitOld SpiralLength)
+	{
+		Dist = this.Dist;
+		Length = this.Length;
+		UseSpiralLengths = this.UseSpiralLengths;
+		SpiralLength = this.SpiralLength;
+	}
+
+	public static implicit operator LZDataOld((MethodDataUnitOld Dist, MethodDataUnitOld Length, uint UseSpiralLengths, MethodDataUnitOld SpiralLength) value) => new(value.Dist, value.Length, value.UseSpiralLengths, value.SpiralLength);
 }

@@ -3,7 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
-  </PropertyGroup>
+		<CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+	</PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AresGlobalDecoding-0.075\AresGlobalDecoding-0.075.csproj" />
