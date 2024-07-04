@@ -113,7 +113,7 @@ public static unsafe class Global
 		{
 			list = groups[0];
 			var oldLevel = level++;
-			while (level < n && groups.Length == 1 && list.AllEqual((x, y) => *((ulong*)x + level) == *((ulong*)y + level)))
+			while (level < n && groups.Length == 1 && list.AllEqual(x => *((ulong*)x + level)))
 				level++;
 			if (level >= n)
 			{
@@ -142,7 +142,7 @@ public static unsafe class Global
 			{
 				list = groups[pos];
 				var oldLevel = level++;
-				while (level < n && pos == groups.Length - 1 && list.AllEqual((x, y) => *((ulong*)x + level) == *((ulong*)y + level)))
+				while (level < n && pos == groups.Length - 1 && list.AllEqual(x => *((ulong*)x + level)))
 					level++;
 				if (level >= n)
 				{
@@ -204,7 +204,7 @@ public static unsafe class Global
 		return bits;
 	}
 
-	public static void WriteCount(this List<Interval> result, uint count, uint maxT = 31)
+	public static void WriteCount(this NList<Interval> result, uint count, uint maxT = 31)
 	{
 		var t = Max(BitsCount(count) - 1, 0);
 		result.Add(new((uint)t, maxT));
@@ -220,9 +220,9 @@ public static unsafe class Global
 		result.Add(new(count - ((t == 0) ? 0 : t2), t2));
 	}
 
-	public static List<Interval> GetCountList(uint count, uint maxT = 31)
+	public static NList<Interval> GetCountList(uint count, uint maxT = 31)
 	{
-		List<Interval> list = [];
+		NList<Interval> list = [];
 		list.WriteCount(count, maxT);
 		return list;
 	}
@@ -235,11 +235,10 @@ public static unsafe class Global
 	/// <returns>Количество бит в числе.</returns>
 	public static int BitsCount(uint x)
 	{
-		var x_ = x;
 		var count = 0;
-		while (x_ > 0)
+		while (x > 0)
 		{
-			x_ >>= 1;
+			x >>= 1;
 			count++;
 		}
 		return count;

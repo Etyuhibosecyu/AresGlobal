@@ -10,6 +10,7 @@ global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
 using LZEntry = System.Collections.Generic.KeyValuePair<uint, (uint dist, ushort length, ushort spiralLength)>;
+using System.Diagnostics;
 
 namespace AresGlobalMethods;
 
@@ -136,7 +137,7 @@ public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> resu
 		arithmeticMap.Dispose();
 		frequencyIntervals.Dispose();
 		Status[tn]++;
-		List<Interval> c = [];
+		NList<Interval> c = [];
 		c.WriteCount((uint)maxFrequency - 1);
 		c.WriteCount((uint)frequencyTable.Length - 1);
 		Status[tn] = 0;
@@ -270,7 +271,8 @@ public class LempelZiv
 					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
 					k += complexCodes.Compare(iIC + k, complexCodes, lastMatch + k, ub2 - k + 1);
 				}
-				if (input.GetSlice(iIC + lzStart - 2, k).Sum(x => x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k))
+				var product = 1d;
+				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
@@ -289,8 +291,8 @@ public class LempelZiv
 				var jIC = (int)ic[i - 1];
 				if (!(iIC - jIC is >= 2 and < LZDictionarySize && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, jIC, k) == k)))
 					continue;
-				double sum = 0;
-				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (sum += x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k)))
+				var product = 1d;
+				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
@@ -372,8 +374,8 @@ public class LempelZiv
 				var jIC = (int)ic[i - 1];
 				if (iIC - jIC is < 2 or >= LZDictionarySize)
 					continue;
-				double sum = 0;
-				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (sum += x.Sum(y => Log((double)y.Base / y.Length))) < Log((double)21 * LZDictionarySize * k)))
+				var product = 1d;
+				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
 				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
@@ -418,11 +420,15 @@ public class LempelZiv
 		var brokenRepeatsInfo = sortedRepeatsInfo2.PConvert(l => (l.Item1, l.Item2.PNBreak()));
 		sortedRepeatsInfo2.ForEach(x => x.Item2.Dispose());
 		sortedRepeatsInfo2.Dispose();
-		Parallel.ForEach(brokenRepeatsInfo, x => WriteLZMatches(input, lzStart, useSpiralLengths, x.Item1, x.Item2.Item1, x.Item2.Item2, x.Item2.Item3, maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, PrimitiveType.UShortType, false));
+		void ProcessBrokenRepeats((NList<uint>, (NList<uint>, NList<ushort>, NList<ushort>)) x) => WriteLZMatches(input, lzStart, useSpiralLengths, x.Item1, x.Item2.Item1, x.Item2.Item2, x.Item2.Item3, maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, PrimitiveType.UShortType, false);
+		if (pixels || cout)
+			brokenRepeatsInfo.ForEach(ProcessBrokenRepeats);
+		else
+			Parallel.ForEach(brokenRepeatsInfo, ProcessBrokenRepeats);
 		result.FilterInPlace((x, index) => index == 0 || !elementsReplaced[index]);
 		elementsReplaced.Dispose();
 		result[0].Add(LempelZivApplied);
-		List<Interval> c = [new Interval((uint)rDist, 3)];
+		NList<Interval> c = [new Interval((uint)rDist, 3)];
 		c.WriteCount(maxDist);
 		if (rDist != 0)
 			c.Add(new(thresholdDist, maxDist + 1));
@@ -607,7 +613,7 @@ public class LempelZiv
 	{
 		result.Replace(input);
 		result[0] = new(result[0]) { LempelZivDummyApplied };
-		List<Interval> list = [new(0, 3)];
+		NList<Interval> list = [new(0, 3)];
 		list.WriteCount(0);
 		list.Add(new(0, 3));
 		list.WriteCount(0, 16);
