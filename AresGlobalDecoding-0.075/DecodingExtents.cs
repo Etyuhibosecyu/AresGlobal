@@ -3,6 +3,16 @@ namespace AresGlobalMethods;
 
 public static class DecodingExtents
 {
+	public const int WordsListActualParts = 3;
+	public static int BWTBlockSize { get; set; } = 50000;
+#pragma warning disable CS0652 // Сравнение с константой интеграции бесполезно: константа находится за пределами диапазона типа
+	public static int BWTBlockExtraSize => BWTBlockSize <= 0x4000 ? 2 : BWTBlockSize <= 0x400000 ? 3 : BWTBlockSize <= 0x40000000 ? 4 : BWTBlockSize <= 0x4000000000 ? 5 : BWTBlockSize <= 0x400000000000 ? 6 : BWTBlockSize <= 0x40000000000000 ? 7 : 8;
+#pragma warning restore CS0652 // Сравнение с константой интеграции бесполезно: константа находится за пределами диапазона типа
+	public static int FragmentLength { get; set; } = 16000000;
+	public static int PreservedFragmentLength { get; set; } = FragmentLength;
+
+	public static uint GetFragmentLength() => (uint)FragmentLength;
+
 	public static List<ShortIntervalList> DecodeLempelZiv(this List<ShortIntervalList> compressedList, bool lz, int lzRDist, uint lzThresholdDist, int lzRLength, uint lzThresholdLength, uint lzUseSpiralLengths, int lzRSpiralLength, uint lzThresholdSpiralLength, int tn)
 	{
 		List<ShortIntervalList> result = [];

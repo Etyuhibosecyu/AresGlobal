@@ -6,6 +6,7 @@ global using System.Text;
 global using System.Threading.Tasks;
 global using UnsafeFunctions;
 global using G = System.Collections.Generic;
+global using static AresGlobalMethods.DecodingExtents;
 global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
@@ -221,7 +222,7 @@ public class LempelZiv
 		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.NSort());
 		indexCodesList.Dispose();
 		var startKGlobal = 2;
-		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>());
+		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>(65));
 		uint useSpiralLengths = 0;
 		var maxLevel = Max(BitsCount(LZDictionarySize) / 2 - 5, 0);
 		Status[tn] = 0;
@@ -406,7 +407,7 @@ public class LempelZiv
 	{
 		if (repeatsInfo.Length == 0)
 			return LempelZivDummy(input);
-		LZRequisites(input.Length, 1, repeatsInfo, out var boundIndex, out var repeatsInfoList2, out var starts, out var dists, out var lengths, out var spiralLengths, out var maxDist, out var maxLength, out var maxSpiralLength, out var rDist, out var thresholdDist, out var rLength, out var thresholdLength, out var rSpiralLength, out var thresholdSpiralLength, PrimitiveType.UShortType);
+		LZRequisites(input.Length, 1, repeatsInfo, out var boundIndex, out var repeatsInfoList, out var starts, out var dists, out var lengths, out var spiralLengths, out var maxDist, out var maxLength, out var maxSpiralLength, out var rDist, out var thresholdDist, out var rLength, out var thresholdLength, out var rSpiralLength, out var thresholdSpiralLength, PrimitiveType.UShortType);
 		result.Replace(input);
 		result[0] = new(result[0]);
 		Status[tn] = 0;
@@ -414,9 +415,9 @@ public class LempelZiv
 		Current[tn] += ProgressBarStep;
 		BitList elementsReplaced = new(result.Length, false);
 		WriteLZMatches(input, lzStart, useSpiralLengths, starts[..boundIndex], dists, lengths, spiralLengths, maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, PrimitiveType.UShortType);
-		var sortedRepeatsInfo2 = repeatsInfoList2.PConvert(l => l.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength)));
-		repeatsInfoList2.ForEach(x => x.Dispose());
-		repeatsInfoList2.Dispose();
+		var sortedRepeatsInfo2 = repeatsInfoList.PConvert(l => l.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength)));
+		repeatsInfoList.ForEach(x => x.Dispose());
+		repeatsInfoList.Dispose();
 		var brokenRepeatsInfo = sortedRepeatsInfo2.PConvert(l => (l.Item1, l.Item2.PNBreak()));
 		sortedRepeatsInfo2.ForEach(x => x.Item2.Dispose());
 		sortedRepeatsInfo2.Dispose();
@@ -467,16 +468,16 @@ public class LempelZiv
 		return result;
 	}
 
-	public static void LZRequisites<T>(int inputLength, int multiplier, NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList2, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
+	public static void LZRequisites<T>(int inputLength, int multiplier, NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
 	{
-		var repeatsInfoList = repeatsInfo.Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
-		var boundIndex2 = boundIndex = repeatsInfoList.FindIndex(x => (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) < multiplier * 10);
+		var repeatsInfoList2 = repeatsInfo.Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
+		var boundIndex2 = boundIndex = repeatsInfoList2.FindIndex(x => (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) < multiplier * 10);
 		if (boundIndex == -1)
-			boundIndex2 = boundIndex = repeatsInfoList.Length;
+			boundIndex2 = boundIndex = repeatsInfoList2.Length;
 		var processorBlockLength = GetArrayLength(inputLength, Environment.ProcessorCount);
-		repeatsInfoList2 = RedStarLinq.PFill(Environment.ProcessorCount, index => repeatsInfoList[boundIndex2..].Filter(x => x.Key / processorBlockLength == index && (x.Key + (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 1) / processorBlockLength == index));
-		var sortedRepeatsInfo = repeatsInfoList.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength));
-		repeatsInfoList.Dispose();
+		repeatsInfoList = RedStarLinq.PFill(Environment.ProcessorCount, index => repeatsInfoList2[boundIndex2..].Filter(x => x.Key / processorBlockLength == index && (x.Key + (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 1) / processorBlockLength == index));
+		var sortedRepeatsInfo = repeatsInfoList2.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength));
+		repeatsInfoList2.Dispose();
 		(starts, (dists, lengths, spiralLengths)) = (sortedRepeatsInfo.Item1, sortedRepeatsInfo.Item2.PNBreak());
 		sortedRepeatsInfo.Item2.Dispose();
 		(var distsSum, maxDist) = dists.Wrap(l => (l.Sum(), l.Max()));

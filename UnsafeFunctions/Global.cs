@@ -9,6 +9,7 @@ global using G = System.Collections.Generic;
 global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
+using System.Numerics;
 
 namespace UnsafeFunctions;
 
@@ -39,13 +40,24 @@ public static unsafe class Global
 	public static Interval LengthsApplied { get; } = new(0, 15, 15);
 	public static Interval BWTApplied { get; } = new(0, 16, 16);
 	public static Interval LWApplied { get; } = new(0, 17, 17);
-	public static Interval RepeatsNotApplied { get; } = new(0, 224, 225);
 	public static Interval LempelZivSubdivided { get; } = new(0, 20, 20);
 	public static Interval HuffmanDummyApplied { get; } = new(0, 21, 21);
 	public static Interval LempelZivDummyApplied { get; } = new(0, 22, 22);
 	public static List<ShortIntervalList> ByteIntervals { get; } = RedStarLinq.Fill(ValuesInByte, index => new ShortIntervalList() { new Interval((uint)index, ValuesInByte) });
 	public static List<ShortIntervalList> ByteIntervals2 { get; } = RedStarLinq.Fill(ValuesInByte, index => new ShortIntervalList() { new Interval((uint)index, 269) });
 	public static uint[] FibonacciSequence { get; } = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, 2178309, 3524578, 5702887, 9227465, 14930352, 24157817, 39088169, 63245986, 102334155, 165580141, 267914296, 433494437, 701408733, 1134903170, 1836311903, 2971215073];
+
+	public static Vector<byte>[] AsFastVectors(Span<byte> bytes)
+	{
+		fixed (byte* ptr = bytes)
+			return new Span<Vector<byte>>(ptr, bytes.Length / Vector<byte>.Count).ToArray();
+	}
+
+	public static Span<byte> ReleaseFastVectors(Span<Vector<byte>> vectors)
+	{
+		fixed (Vector<byte>* ptr = vectors)
+			return new Span<byte>(ptr, vectors.Length * Vector<byte>.Count);
+	}
 
 	public static List<(uint[] Group, TSource Key)> PGroup<TSource>(this G.IReadOnlyList<TSource> source, int tn, G.IEqualityComparer<TSource>? comparer = null)
 	{
@@ -76,35 +88,36 @@ public static unsafe class Global
 		var result = RedStarLinq.EmptyList<(uint[] Group, TSource Key)>(hs.Length);
 		Parallel.For(0, hs.Length, i => result[i] = (new uint[innerCount[i]], dicKeys[i]));
 		Parallel.For(0, length, i => result[innerIndexes[i]].Group[innerIndexes2[i]] = (uint)i);
-		Marshal.FreeHGlobal((IntPtr)innerCount);
-		Marshal.FreeHGlobal((IntPtr)innerIndexes2);
-		Marshal.FreeHGlobal((IntPtr)innerIndexes);
+		Marshal.FreeHGlobal((nint)innerCount);
+		Marshal.FreeHGlobal((nint)innerIndexes2);
+		Marshal.FreeHGlobal((nint)innerIndexes);
 		return result;
 	}
 
-	public static int BWTCompare<T>(this T[] buffer, int n) where T : unmanaged
+	public static NList<int> BWTCompare<T>(this T[] buffer, int n) where T : unmanaged
 	{
 		List<nint> list = [];
 		fixed (T* ptr = buffer)
 		{
 			for (var i = 0; i < n; i++)
 				list.Add((nint)(ptr + i));
-			return Min(BWTCompare(list, GetArrayLength(n, sizeof(ulong) / sizeof(T))) * sizeof(ulong) / sizeof(T), n);
+			return BWTCompare(list, GetArrayLength(n, sizeof(ulong) / sizeof(T))).ConvertAndJoin(x => new Chain(x * sizeof(ulong) / sizeof(T), sizeof(ulong) / sizeof(T))).ToNList().Sort(x => 0xffffffff - (uint)x);
 		}
 	}
 
-	private static int BWTCompare(List<nint> list, int n)
+	private static ListHashSet<int> BWTCompare(List<nint> list, int n)
 	{
 		if (list.Length <= 1)
-			return 0;
+			return [];
 		var level = 0;
 		var pos = 0;
-		var result = 0;
+		ListHashSet<int> result = [0];
 		Stack<List<nint>> listStack = new(2 * BitsCount((uint)n + 1));
 		Stack<List<Group<nint, ulong>>> groupsStack = new(2 * BitsCount((uint)n + 1));
 		Stack<int> levelStack = new(2 * BitsCount((uint)n + 1));
 		Stack<int> posStack = new(2 * BitsCount((uint)n + 1));
 		List<Group<nint, ulong>> groups;
+		var firstList = list;
 		listStack.Push(list);
 		groupsStack.Push(groups = list.Group(x => *(ulong*)x));
 		levelStack.Push(0);
@@ -112,6 +125,8 @@ public static unsafe class Global
 		while (groups.Length < list.Length)
 		{
 			list = groups[0];
+			if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(ulong) * n : 0) - 1)))
+				break;
 			var oldLevel = level++;
 			while (level < n && groups.Length == 1 && list.AllEqual(x => *((ulong*)x + level)))
 				level++;
@@ -120,6 +135,7 @@ public static unsafe class Global
 				level = oldLevel;
 				break;
 			}
+			result.Add(level);
 			listStack.Push(list);
 			groups = list.Group(x => *((ulong*)x + level));
 			(groups[CreateVar(groups.IndexOfMax(x => x.Length), out var maxIndex)], groups[^1]) = (groups[^1], groups[maxIndex]);
@@ -127,7 +143,6 @@ public static unsafe class Global
 			levelStack.Push(level);
 			posStack.Push(0);
 		}
-		result = Max(result, level + 1);
 		while (listStack.TryPeek(out list) && groupsStack.TryPeek(out groups) && levelStack.TryPeek(out level) && posStack.TryPop(out pos))
 		{
 			if (++pos >= groups.Length)
@@ -141,6 +156,8 @@ public static unsafe class Global
 			while (groups.Length < list.Length)
 			{
 				list = groups[pos];
+				if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(ulong) * n : 0) - 1)))
+					break;
 				var oldLevel = level++;
 				while (level < n && pos == groups.Length - 1 && list.AllEqual(x => *((ulong*)x + level)))
 					level++;
@@ -149,6 +166,7 @@ public static unsafe class Global
 					level = oldLevel;
 					break;
 				}
+				result.Add(level);
 				listStack.Push(list);
 				groups = list.Group(x => *((ulong*)x + level));
 				(groups[CreateVar(groups.IndexOfMax(x => x.Length), out var maxIndex)], groups[^1]) = (groups[^1], groups[maxIndex]);
@@ -156,7 +174,6 @@ public static unsafe class Global
 				levelStack.Push(level);
 				posStack.Push(pos = 0);
 			}
-			result = Max(result, level + 1);
 		}
 		return result;
 	}

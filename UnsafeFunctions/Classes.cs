@@ -124,9 +124,10 @@ public unsafe class ShortIntervalList : IDisposable, IList<Interval>
 
 	void G.ICollection<Interval>.CopyTo(Interval[] array, int arrayIndex) => CopyTo(array, arrayIndex);
 
-	public unsafe void Dispose()
+	public void Dispose()
 	{
-		Marshal.FreeHGlobal((nint)secondPart);
+		if (secondPart != null)
+			Marshal.FreeHGlobal((nint)secondPart);
 		_size = 0;
 		GC.SuppressFinalize(this);
 	}
