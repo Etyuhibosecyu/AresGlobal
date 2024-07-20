@@ -101,11 +101,13 @@ public static unsafe class Global
 		{
 			for (var i = 0; i < n; i++)
 				list.Add((nint)(ptr + i));
-			return BWTCompare(list, GetArrayLength(n, sizeof(ulong) / sizeof(T))).ConvertAndJoin(x => new Chain(x * sizeof(ulong) / sizeof(T), sizeof(ulong) / sizeof(T))).ToNList().Sort(x => 0xffffffff - (uint)x);
+			if (n >= 1000000)
+				return BWTCompare<byte>(list, n).ToNList().Sort(x => 0xffffffff - (uint)x);
+			return BWTCompare<ulong>(list, GetArrayLength(n, sizeof(ulong) / sizeof(T))).ConvertAndJoin(x => new Chain(x * sizeof(ulong) / sizeof(T), sizeof(ulong) / sizeof(T))).ToNList().Sort(x => 0xffffffff - (uint)x);
 		}
 	}
 
-	private static ListHashSet<int> BWTCompare(List<nint> list, int n)
+	private static ListHashSet<int> BWTCompare<T>(List<nint> list, int n) where T : unmanaged
 	{
 		if (list.Length <= 1)
 			return [];
@@ -113,22 +115,22 @@ public static unsafe class Global
 		var pos = 0;
 		ListHashSet<int> result = [0];
 		Stack<List<nint>> listStack = new(2 * BitsCount((uint)n + 1));
-		Stack<List<Group<nint, ulong>>> groupsStack = new(2 * BitsCount((uint)n + 1));
+		Stack<List<Group<nint, T>>> groupsStack = new(2 * BitsCount((uint)n + 1));
 		Stack<int> levelStack = new(2 * BitsCount((uint)n + 1));
 		Stack<int> posStack = new(2 * BitsCount((uint)n + 1));
-		List<Group<nint, ulong>> groups;
+		List<Group<nint, T>> groups;
 		var firstList = list;
 		listStack.Push(list);
-		groupsStack.Push(groups = list.Group(x => *(ulong*)x));
+		groupsStack.Push(groups = list.Group(x => *(T*)x));
 		levelStack.Push(0);
 		posStack.Push(0);
 		while (groups.Length < list.Length)
 		{
 			list = groups[0];
-			if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(ulong) * n : 0) - 1)))
+			if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(T) * n : 0) - 1)))
 				break;
 			var oldLevel = level++;
-			while (level < n && groups.Length == 1 && list.AllEqual(x => *((ulong*)x + level)))
+			while (level < n && groups.Length == 1 && list.AllEqual(x => *((T*)x + level)))
 				level++;
 			if (level >= n)
 			{
@@ -137,7 +139,7 @@ public static unsafe class Global
 			}
 			result.Add(level);
 			listStack.Push(list);
-			groups = list.Group(x => *((ulong*)x + level));
+			groups = list.Group(x => *((T*)x + level));
 			(groups[CreateVar(groups.IndexOfMax(x => x.Length), out var maxIndex)], groups[^1]) = (groups[^1], groups[maxIndex]);
 			groupsStack.Push(groups);
 			levelStack.Push(level);
@@ -156,10 +158,10 @@ public static unsafe class Global
 			while (groups.Length < list.Length)
 			{
 				list = groups[pos];
-				if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(ulong) * n : 0) - 1)))
+				if (list.AllEqual(x => *((byte*)x + (x == firstList[0] ? sizeof(T) * n : 0) - 1)))
 					break;
 				var oldLevel = level++;
-				while (level < n && pos == groups.Length - 1 && list.AllEqual(x => *((ulong*)x + level)))
+				while (level < n && pos == groups.Length - 1 && list.AllEqual(x => *((T*)x + level)))
 					level++;
 				if (level >= n)
 				{
@@ -168,7 +170,7 @@ public static unsafe class Global
 				}
 				result.Add(level);
 				listStack.Push(list);
-				groups = list.Group(x => *((ulong*)x + level));
+				groups = list.Group(x => *((T*)x + level));
 				(groups[CreateVar(groups.IndexOfMax(x => x.Length), out var maxIndex)], groups[^1]) = (groups[^1], groups[maxIndex]);
 				groupsStack.Push(groups);
 				levelStack.Push(level);

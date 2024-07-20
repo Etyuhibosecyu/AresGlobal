@@ -4,7 +4,7 @@ namespace AresGlobalMethods;
 public static class DecodingExtents
 {
 	public const int WordsListActualParts = 3;
-	public static int BWTBlockSize { get; set; } = 50000;
+	public static int BWTBlockSize { get; set; } = 1000000;
 #pragma warning disable CS0652 // Сравнение с константой интеграции бесполезно: константа находится за пределами диапазона типа
 	public static int BWTBlockExtraSize => BWTBlockSize <= 0x4000 ? 2 : BWTBlockSize <= 0x400000 ? 3 : BWTBlockSize <= 0x40000000 ? 4 : BWTBlockSize <= 0x4000000000 ? 5 : BWTBlockSize <= 0x400000000000 ? 6 : BWTBlockSize <= 0x40000000000000 ? 7 : 8;
 #pragma warning restore CS0652 // Сравнение с константой интеграции бесполезно: константа находится за пределами диапазона типа
