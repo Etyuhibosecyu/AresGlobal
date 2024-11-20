@@ -26,7 +26,7 @@ public readonly struct Interval : IEquatable<Interval>
 	{
 		if (@base == 0)
 			throw new ArgumentException(null, nameof(@base));
-		if (lower < 0 || lower + length > @base)
+		if (lower < 0 || lower + length > @base || length == 0)
 			throw new ArgumentException(null);
 		Lower = lower;
 		Length = length;
@@ -59,134 +59,137 @@ public readonly struct Interval : IEquatable<Interval>
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
 [DebuggerDisplay("Length = {Length}")]
-public unsafe class ShortIntervalList : IDisposable, IList<Interval>
+public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 {
 	private const int partSize = 4;
-	private readonly Interval Item1 = default!, Item2 = default!, Item3 = default!, Item4 = default!;
-	private Interval* secondPart = null;
-	private byte _size;
+	private static readonly int lengthOffset = sizeof(Interval) * partSize + sizeof(Interval*);
+	private readonly Interval* items = (Interval*)Marshal.AllocHGlobal(lengthOffset + 1);
 
-	public ShortIntervalList()
-	{
-	}
+	public ShortIntervalList() => FillMemory((byte*)items, lengthOffset + 1, 0);
 
 	public ShortIntervalList(G.IEnumerable<Interval> collection)
 	{
+		FillMemory((byte*)items, lengthOffset + 1, 0);
 		foreach (var item in collection)
 			Add(item);
 	}
 
-	public bool IsReadOnly => false;
+	public readonly bool IsReadOnly => false;
 
-	public int Length => _size;
+	public readonly int Length { get => *((byte*)items + lengthOffset); private set => *((byte*)items + lengthOffset) = value < ValuesInByte ? (byte)value : throw new InvalidOperationException(); }
 
-	public Interval this[int index]
+	public readonly Interval this[int index]
 	{
-		get => index >= 0 && index < _size ? GetInternal(index) : throw new ArgumentOutOfRangeException(nameof(index));
+		get => index >= 0 && index < Length ? GetInternal(index) : throw new ArgumentOutOfRangeException(nameof(index));
 		set
 		{
-			if (index < 0 || index >= _size)
+			if (index < 0 || index >= Length)
 				throw new ArgumentOutOfRangeException(nameof(index));
 			SetInternal(index, value);
 		}
 	}
 
-	Interval G.IList<Interval>.this[int index] { get => this[index]; set => this[index] = value; }
-
-	public void Add(Interval item) => SetInternal(_size++, item);
+	public ShortIntervalList Add(Interval item)
+	{
+		SetInternal(Length++, item);
+		return this;
+	}
 
 	void G.ICollection<Interval>.Add(Interval item) => Add(item);
 
-	public void Clear() => _size = 0;
+	public void Clear() => Length = 0;
 
-	public bool Contains(Interval item)
+	public readonly bool Contains(Interval item)
 	{
-		fixed (Interval* ptr = &Item1)
-			for (var i = 0; i < _size && i < partSize; i++)
-				if (ptr[i] == item)
-					return true;
-		for (var i = 0; i < _size - partSize && i < partSize; i++)
+		for (var i = 0; i < Length && i < partSize; i++)
+			if (items[i] == item)
+				return true;
+		var secondPart = *(Interval**)(items + partSize);
+		for (var i = 0; i < Length - partSize && i < partSize; i++)
 			if (secondPart[i] == item)
 				return true;
 		return false;
 	}
 
-	bool G.ICollection<Interval>.Contains(Interval item) => Contains(item);
-
-	public void CopyTo(Interval[] array, int arrayIndex)
+	public readonly void CopyTo(Interval[] array, int arrayIndex)
 	{
-		fixed (Interval* ptr = &Item1)
-			for (var i = 0; i < _size && i < partSize; i++)
-				array[arrayIndex++] = ptr[i];
-		for (var i = 0; i < _size - partSize && i < partSize; i++)
+		for (var i = 0; i < Length && i < partSize; i++)
+			array[arrayIndex++] = items[i];
+		var secondPart = *(Interval**)(items + partSize);
+		for (var i = 0; i < Length - partSize && i < partSize; i++)
 			array[arrayIndex++] = secondPart[i];
 	}
 
-	void G.ICollection<Interval>.CopyTo(Interval[] array, int arrayIndex) => CopyTo(array, arrayIndex);
-
 	public void Dispose()
 	{
-		if (secondPart != null)
-			Marshal.FreeHGlobal((nint)secondPart);
-		_size = 0;
+		if (items != null)
+		{
+			var secondPart = *(Interval**)(items + partSize);
+			if (secondPart != null)
+				Marshal.FreeHGlobal((nint)secondPart);
+			Marshal.FreeHGlobal((nint)items);
+			Length = 0;
+		}
 		GC.SuppressFinalize(this);
 	}
 
-	public Enumerator GetEnumerator() => new(this);
+	public readonly Enumerator GetEnumerator() => new(this);
 
-	G.IEnumerator<Interval> G.IEnumerable<Interval>.GetEnumerator() => GetEnumerator();
+	readonly G.IEnumerator<Interval> G.IEnumerable<Interval>.GetEnumerator() => GetEnumerator();
 
-	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+	readonly IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-	private Interval GetInternal(int index)
+	private readonly Interval GetInternal(int index)
 	{
-		fixed (Interval* ptr = &Item1)
-			return index switch
-			{
-				< partSize => ptr[index],
-				< partSize * 2 => secondPart[index - partSize],
-				_ => throw new ArgumentOutOfRangeException(nameof(index)),
-			};
+		var secondPart = *(Interval**)(items + partSize);
+		return index switch
+		{
+			< partSize => items[index],
+			< partSize * 2 => secondPart[index - partSize],
+			_ => throw new ArgumentOutOfRangeException(nameof(index)),
+		};
 	}
 
-	public int IndexOf(Interval item)
+	public readonly int IndexOf(Interval item)
 	{
-		fixed (Interval* ptr = &Item1)
-			for (var i = 0; i < _size && i < partSize; i++)
-				if (ptr[i] == item)
-					return i;
-		for (var i = 0; i < _size - partSize && i < partSize; i++)
+		for (var i = 0; i < Length && i < partSize; i++)
+			if (items[i] == item)
+				return i;
+		var secondPart = *(Interval**)(items + partSize);
+		for (var i = 0; i < Length - partSize && i < partSize; i++)
 			if (secondPart[i] == item)
 				return i + partSize;
 		return -1;
 	}
 
-	int G.IList<Interval>.IndexOf(Interval item) => IndexOf(item);
+	readonly int G.IList<Interval>.IndexOf(Interval item) => IndexOf(item);
 
 	public void Insert(int index, Interval item)
 	{
-		if (index < 0 || index > _size)
+		if (index < 0 || index > Length)
 			throw new ArgumentOutOfRangeException(nameof(index));
-		if (_size >= partSize * 2)
+		if (Length >= partSize * 2)
 			throw new InvalidOperationException();
-		if (_size >= partSize && secondPart == null)
-			secondPart = (Interval*)Marshal.AllocHGlobal(sizeof(Interval) * partSize);
-		for (var i = _size - 1; i >= index; i--)
+		var secondPart = *(Interval**)(items + partSize);
+		if (Length >= partSize && secondPart == null)
+			secondPart = *(Interval**)(items + partSize) = (Interval*)Marshal.AllocHGlobal(sizeof(Interval) * partSize);
+		for (var i = Length - 1; i >= index; i--)
 			SetInternal(i + 1, GetInternal(i));
 		SetInternal(index, item);
-		_size++;
+		Length++;
 	}
 
 	void G.IList<Interval>.Insert(int index, Interval item) => Insert(index, item);
 
-	public void RemoveAt(int index)
+	public ShortIntervalList RemoveAt(int index)
 	{
-		if (index < 0 || index >= _size)
+		if (index < 0 || index >= Length)
 			throw new ArgumentOutOfRangeException(nameof(index));
-		for (var i = index; i < _size - 1; i++)
+		for (var i = index; i < Length - 1; i++)
 			SetInternal(i, GetInternal(i + 1));
-		SetInternal(_size - 1, default!);
-		_size--;
+		SetInternal(Length - 1, default!);
+		Length--;
+		return this;
 	}
 
 	void G.IList<Interval>.RemoveAt(int index) => RemoveAt(index);
@@ -199,17 +202,30 @@ public unsafe class ShortIntervalList : IDisposable, IList<Interval>
 		return index >= 0;
 	}
 
-	private void SetInternal(int index, Interval value)
+	public readonly ShortIntervalList Set(Index index, Interval item)
 	{
+		this[index] = item;
+		return this;
+	}
+
+	private readonly void SetInternal(int index, Interval value)
+	{
+		var secondPart = *(Interval**)(items + partSize);
 		if (index >= partSize && secondPart == null)
-			secondPart = (Interval*)Marshal.AllocHGlobal(sizeof(Interval) * partSize);
-		fixed (Interval* ptr = &Item1)
-			switch (index)
-			{
-				case < partSize: ptr[index] = value; break;
-				case < partSize * 2: secondPart[index - partSize] = value; break;
-				default: throw new ArgumentOutOfRangeException(nameof(index));
-			}
+			secondPart = *(Interval**)(items + partSize) = (Interval*)Marshal.AllocHGlobal(sizeof(Interval) * partSize);
+		switch (index)
+		{
+			case < partSize: items[index] = value; break;
+			case < partSize * 2: secondPart[index - partSize] = value; break;
+			default: throw new ArgumentOutOfRangeException(nameof(index));
+		}
+	}
+
+	public readonly Interval[] ToArray()
+	{
+		var array = new Interval[Length];
+		CopyTo(array, 0);
+		return array;
 	}
 
 	public struct Enumerator(ShortIntervalList list) : G.IEnumerator<Interval>
@@ -226,15 +242,15 @@ public unsafe class ShortIntervalList : IDisposable, IList<Interval>
 
 		public bool MoveNext()
 		{
-			if (_index >= list._size)
+			if (_index >= list.Length)
 				return false;
-			fixed (Interval* ptr = &list.Item1)
-				Current = _index switch
-				{
-					< partSize => ptr[_index],
-					< partSize * 2 => list.secondPart[_index - partSize],
-					_ => default!,
-				};
+			var secondPart = *(Interval**)(list.items + partSize);
+			Current = _index switch
+			{
+				< partSize => list.items[_index],
+				< partSize * 2 => secondPart[_index - partSize],
+				_ => default!,
+			};
 			_index++;
 			return true;
 		}

@@ -10,7 +10,7 @@ public class ArithmeticEncoder : IDisposable
 	private const uint l0 = 0, h0 = uint.MaxValue, firstQtr = (h0 - 1) / 4 + 1, half = firstQtr * 2, thirdQtr = firstQtr * 3;
 	private uint l = l0, h = h0;
 	private int bitsToFollow;
-	private static readonly BitList[] shortLists = [.. RedStarLinq.Fill(10, index => new BitList(index + 1, false)), .. RedStarLinq.Fill(10, index => new BitList(index + 1, true))];
+	private static readonly BitList[] shortLists = [.. RedStarLinq.Fill(10, index => new BitList(index + 1, false)).AddSeries(10, index => new BitList(index + 1, true))];
 
 	public int Length => bits.Length;
 
@@ -40,13 +40,15 @@ public class ArithmeticEncoder : IDisposable
 
 	public void WritePart(uint c, uint length, uint cCount)
 	{
-		if (c < 0 || c + length > cCount)
+		if (c < 0 || length <= 0 || c + length > cCount)
 			throw new ArgumentException(null);
 		uint ol = l, oh = h;
 		l = (uint)(ol + c * ((ulong)oh - ol + 1) / cCount);
 		h = (uint)(ol + (c + length) * ((ulong)oh - ol + 1) / cCount - 1);
 		WriteInternal();
 	}
+
+	public void WritePart(Interval interval) => WritePart(interval.Lower, interval.Length, interval.Base);
 
 	public void WriteFibonacci(uint number)
 	{
@@ -101,6 +103,8 @@ public class ArithmeticEncoder : IDisposable
 		x.bits.CopyTo(bytes, 0);
 		return bytes;
 	}
+
+	public static implicit operator NList<byte>(ArithmeticEncoder x) => x.bits.ToByteList();
 }
 
 [DebuggerDisplay("Length = {Length}")]
@@ -114,6 +118,13 @@ public class ArithmeticDecoder : IDisposable
 	public int Length => bits.Length;
 
 	public ArithmeticDecoder(byte[] byteList)
+	{
+		bits = new(byteList);
+		value = ReverseBits(bits.GetSmallRange(0, 32));
+		pos = Min(32, bits.Length);
+	}
+
+	public ArithmeticDecoder(NList<byte> byteList)
 	{
 		bits = new(byteList);
 		value = ReverseBits(bits.GetSmallRange(0, 32));
@@ -239,6 +250,8 @@ public class ArithmeticDecoder : IDisposable
 	}
 
 	public static implicit operator ArithmeticDecoder(byte[] x) => new(x);
+
+	public static implicit operator ArithmeticDecoder(NList<byte> x) => new(x);
 }
 
 public record struct ImageData(int Width, int Height, uint RAlpha)

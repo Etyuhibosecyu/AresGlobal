@@ -1,13 +1,13 @@
 ﻿
 namespace AresGlobalMethods;
 
-public class PPMDec
+public class PPMDec : IDisposable
 {
 	protected ArithmeticDecoder ar = default!;
 	protected uint inputBase, dicsize;
 	protected int blockIndex;
 	protected uint counter, nextWordLink;
-	protected List<ShortIntervalList> result = default!;
+	protected NList<ShortIntervalList> result = default!;
 	protected NList<uint> context = default!;
 	protected NList<uint> context2 = default!;
 	protected SumSet<uint> set = default!;
@@ -30,6 +30,23 @@ public class PPMDec
 		this.inputBase = inputBase;
 		this.blockIndex = blockIndex;
 		Initialize();
+	}
+
+	public void Dispose()
+	{
+		set?.Dispose();
+		excludingSet?.Dispose();
+		globalSet?.Dispose();
+		newItemsSet?.Dispose();
+		contextHS?.ForEach(x => x?.Dispose());
+		contextHS?.Dispose();
+		sumSets?.ForEach(x => x?.Dispose());
+		sumSets?.Dispose();
+		preLZMap?.Dispose();
+		spacesMap?.Dispose();
+		lzLengthsSL?.Dispose();
+		lzPositions?.Dispose();
+		GC.SuppressFinalize(this);
 	}
 
 	protected virtual void Initialize()
@@ -57,7 +74,7 @@ public class PPMDec
 		lzLengthsSL = [1];
 	}
 
-	public virtual List<ShortIntervalList> Decode()
+	public virtual NList<ShortIntervalList> Decode()
 	{
 		for (; (int)counter > 0; counter--, Status[0]++)
 		{

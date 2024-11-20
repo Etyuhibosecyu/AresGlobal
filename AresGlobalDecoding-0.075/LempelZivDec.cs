@@ -1,11 +1,11 @@
 ﻿
 namespace AresGlobalMethods;
 
-public class LempelZivDec(List<ShortIntervalList> compressedList, bool lz, LZDataOld lzData, int tn)
+public class LempelZivDec(NList<ShortIntervalList> compressedList, bool lz, LZDataOld lzData, int tn)
 {
-	public List<ShortIntervalList> Decode()
+	public NList<ShortIntervalList> Decode()
 	{
-		List<ShortIntervalList> result = [];
+		NList<ShortIntervalList> result = [];
 		if (!lz)
 			return compressedList;
 		Status[tn] = 0;

@@ -34,21 +34,21 @@ public class GlobalDecoding(ArithmeticDecoder ar)
 		}
 	}
 
-	public virtual void ProcessLZLength(LZData lzData, SumList lengthsSL, out int readIndex, out uint length)
+	public virtual void ProcessLZLength(LZData lzData, SumList lengthsSL, out int readItem, out uint length)
 	{
-		readIndex = ar.ReadPart(lengthsSL);
-		lengthsSL.Increase(readIndex);
+		readItem = ar.ReadPart(lengthsSL);
+		lengthsSL.Increase(readItem);
 		if (lzData.Length.R == 0)
-			length = (uint)readIndex;
+			length = (uint)readItem;
 		else if (lzData.Length.R == 1)
 		{
-			length = (uint)readIndex;
+			length = (uint)readItem;
 			if (length == lzData.Length.Threshold + 1)
 				length += ar.ReadEqual(lzData.Length.Max - lzData.Length.Threshold);
 		}
 		else
 		{
-			length = (uint)readIndex + lzData.Length.Threshold;
+			length = (uint)readItem + lzData.Length.Threshold;
 			if (length == lzData.Length.Max + 1)
 				length = ar.ReadEqual(lzData.Length.Threshold);
 		}
@@ -77,45 +77,45 @@ public class GlobalDecoding(ArithmeticDecoder ar)
 		}
 	}
 
-	public virtual void ProcessLZDist(LZData lzData, SumList distsSL, int fullLength, out int readIndex, out uint dist, uint length, out uint maxDist)
+	public virtual void ProcessLZDist(LZData lzData, SumList distsSL, int fullLength, out int readItem, out uint dist, uint length, out uint maxDist)
 	{
 		maxDist = Min(lzData.Dist.Max, (uint)(fullLength - length - 2));
-		readIndex = ar.ReadPart(distsSL);
-		distsSL.Increase(readIndex);
+		readItem = ar.ReadPart(distsSL);
+		distsSL.Increase(readItem);
 		if (lzData.Dist.R == 0 || maxDist < lzData.Dist.Threshold)
-			dist = (uint)readIndex;
+			dist = (uint)readItem;
 		else if (lzData.Dist.R == 1)
 		{
-			dist = (uint)readIndex;
+			dist = (uint)readItem;
 			if (dist == lzData.Dist.Threshold + 1)
 				dist += ar.ReadEqual(maxDist - lzData.Dist.Threshold + lzData.UseSpiralLengths);
 		}
 		else
-			dist = (uint)readIndex;
+			dist = (uint)readItem;
 	}
 
-	public virtual bool ProcessLZSpiralLength(LZData lzData, ref uint dist, out uint spiralLength, uint maxDist)
+	public virtual void ProcessLZSpiralLength(LZData lzData, ref uint dist, out uint spiralLength, uint maxDist)
 	{
-		if (dist == maxDist + 1)
+		if (dist != maxDist + 1)
 		{
-			if (lzData.SpiralLength.R == 0)
-				spiralLength = ar.ReadEqual(lzData.SpiralLength.Max + 1);
-			else if (lzData.SpiralLength.R == 1)
-			{
-				spiralLength = ar.ReadEqual(lzData.SpiralLength.Threshold + 2);
-				if (spiralLength == lzData.SpiralLength.Threshold + 1)
-					spiralLength += ar.ReadEqual(lzData.SpiralLength.Max - lzData.SpiralLength.Threshold);
-			}
-			else
-			{
-				spiralLength = ar.ReadEqual(lzData.SpiralLength.Max - lzData.SpiralLength.Threshold + 2) + lzData.SpiralLength.Threshold;
-				if (spiralLength == lzData.SpiralLength.Max + 1)
-					spiralLength = ar.ReadEqual(lzData.SpiralLength.Threshold);
-			}
-			return true;
+			spiralLength = 0;
+			return;
 		}
-		spiralLength = 0;
-		return false;
+		dist = 0;
+		if (lzData.SpiralLength.R == 0)
+			spiralLength = ar.ReadEqual(lzData.SpiralLength.Max + 1);
+		else if (lzData.SpiralLength.R == 1)
+		{
+			spiralLength = ar.ReadEqual(lzData.SpiralLength.Threshold + 2);
+			if (spiralLength == lzData.SpiralLength.Threshold + 1)
+				spiralLength += ar.ReadEqual(lzData.SpiralLength.Max - lzData.SpiralLength.Threshold);
+		}
+		else
+		{
+			spiralLength = ar.ReadEqual(lzData.SpiralLength.Max - lzData.SpiralLength.Threshold + 2) + lzData.SpiralLength.Threshold;
+			if (spiralLength == lzData.SpiralLength.Max + 1)
+				spiralLength = ar.ReadEqual(lzData.SpiralLength.Threshold);
+		}
 	}
 
 	public virtual PPMDec CreatePPM(uint @base, int blockIndex = -1) => new(this, ar, @base, blockIndex);

@@ -4,30 +4,31 @@ namespace AresGlobalMethods;
 public record class PPM(int TN) : IDisposable
 {
 	private ArithmeticEncoder ar = default!;
-	private readonly List<NList<Interval>> result = [];
+	private readonly List<NList<Interval>> outputIntervals = [];
 	private int doubleListsCompleted = 0;
 	private readonly object lockObj = new();
 
 	public void Dispose()
 	{
 		ar.Dispose();
+		outputIntervals.Dispose();
 		GC.SuppressFinalize(this);
 	}
 
-	public byte[] Encode(List<ShortIntervalList> input)
+	public NList<byte> Encode(NList<ShortIntervalList> input)
 	{
 		if (input.Length < 4)
 			throw new EncoderFallbackException();
 		ar = new();
-		result.Replace(new List<NList<Interval>>(new NList<Interval>()));
-		if (!new Encoder(input, result[0], 1, true, TN).Encode())
+		outputIntervals.Replace(new List<NList<Interval>>(new NList<Interval>()));
+		if (!new Encoder(input, outputIntervals[0], 1, true, TN).Encode())
 			throw new EncoderFallbackException();
-		result[0].ForEach(x => ar.WritePart(x.Lower, x.Length, x.Base));
+		outputIntervals[0].ForEach(x => ar.WritePart(x));
 		ar.WriteEqual(1234567890, 4294967295);
 		return ar;
 	}
 
-	public byte[] Encode(List<List<ShortIntervalList>> input, bool split = false)
+	public NList<byte> Encode(List<NList<ShortIntervalList>> input, bool split = false)
 	{
 		if (!(input.Length >= 3 && input.GetSlice(..3).All(x => x.Length >= 4) || split))
 			throw new EncoderFallbackException();
@@ -35,10 +36,10 @@ public record class PPM(int TN) : IDisposable
 		Current[TN] = 0;
 		CurrentMaximum[TN] = ProgressBarStep * (BlocksCount - 1);
 		ar = new();
-		result.Replace(RedStarLinq.FillArray(BlocksCount, _ => new NList<Interval>()));
+		outputIntervals.Replace(RedStarLinq.FillArray(BlocksCount, _ => new NList<Interval>()));
 		Parallel.For(0, BlocksCount, i =>
 		{
-			if (!new Encoder(input[i], result[i], split ? 1 : i, i == WordsListActualParts - 1 || split, TN).Encode())
+			if (!new Encoder(input[i], outputIntervals[i], split ? 1 : i, i == WordsListActualParts - 1 || split, TN).Encode())
 				throw new EncoderFallbackException();
 			lock (lockObj)
 			{
@@ -47,14 +48,14 @@ public record class PPM(int TN) : IDisposable
 					Current[TN] += ProgressBarStep;
 			}
 		});
-		result.ForEach(l => l.ForEach(x => ar.WritePart(x.Lower, x.Length, x.Base)));
-		input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar.WritePart(x.Lower, x.Length, x.Base))));
+		outputIntervals.ForEach(l => l.ForEach(x => ar.WritePart(x)));
+		input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar.WritePart(x))));
 		ar.WriteEqual(1234567890, 4294967295);
 		return ar;
 	}
 }
 
-file record class Encoder(List<ShortIntervalList> Input, NList<Interval> Result, int BlockIndex, bool LastBlock, int TN)
+file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result, int BlockIndex, bool LastBlock, int TN) : IDisposable
 {
 	private const int LZDictionarySize = 8388607;
 	private int startPos = 1;
@@ -77,6 +78,30 @@ file record class Encoder(List<ShortIntervalList> Input, NList<Interval> Result,
 	private SumSet<uint> outputFreqTable = [];
 	private readonly NList<Interval> intervalsForBuffer = [];
 	private int lzBufferIndex, lzBlockEnd = 0;
+
+	public void Dispose()
+	{
+		globalFreqTable?.Dispose();
+		newItemsFreqTable?.Dispose();
+		preOutputBuffer?.ForEach(output => output?.Dispose());
+		preOutputBuffer?.Dispose();
+		contextSet?.ForEach(output => output?.Dispose());
+		contextSet?.Dispose();
+		lzBuffer?.Dispose();
+		contextFreqTableByLevel?.ForEach(output => output?.Dispose());
+		contextFreqTableByLevel?.Dispose();
+		lzPositions?.Dispose();
+		lzLengths?.Dispose();
+		spaceBuffer?.Dispose();
+		newItemsBuffer?.Dispose();
+		currentContext?.Dispose();
+		reservedContext?.Dispose();
+		freqTable?.Dispose();
+		excludingFreqTable?.Dispose();
+		outputFreqTable?.Dispose();
+		intervalsForBuffer?.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	public bool Encode()
 	{
@@ -120,7 +145,7 @@ file record class Encoder(List<ShortIntervalList> Input, NList<Interval> Result,
 		inputBase = firstActual[0].Base;
 		if (inputBase < 2 || firstActual[^1].Length != 1)
 			throw new EncoderFallbackException();
-		var restOfInput = Input.GetSlice(startPos + 1);
+		var restOfInput = Input.GetRange(startPos + 1);
 		if (!restOfInput.All(x => x.Length == Input[startPos].Length && x[0].Length == 1
 			&& x[0].Base == inputBase && (x.Length == 1 || x[1].Length == 1 && x[1].Base == Input[startPos][1].Base)))
 			throw new EncoderFallbackException();

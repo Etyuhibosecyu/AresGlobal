@@ -10,14 +10,15 @@ global using static AresGlobalMethods.DecodingExtents;
 global using static Corlib.NStar.Extents;
 global using static System.Math;
 global using static UnsafeFunctions.Global;
-using LZEntry = System.Collections.Generic.KeyValuePair<uint, (uint dist, ushort length, ushort spiralLength)>;
+using LZEntry = System.Collections.Generic.KeyValuePair<uint, (uint dist, uint length, uint spiralLength)>;
+using LZStats = (Corlib.NStar.NList<uint> starts, Corlib.NStar.NList<uint> dists, Corlib.NStar.NList<uint> lengths, Corlib.NStar.NList<uint> spiralLengths);
 using System.Diagnostics;
 
 namespace AresGlobalMethods;
 
 public static class Global
 {
-	public static byte[] WorkUpDoubleList(List<ShortIntervalList> input, int tn)
+	public static NList<byte> WorkUpDoubleList(NList<ShortIntervalList> input, int tn)
 	{
 		if (input.Length == 0)
 			return [];
@@ -30,17 +31,17 @@ public static class Global
 		for (var i = 0; i < input.Length; i++)
 		{
 			for (var j = 0; j < input[i].Length; j++)
-				ar.WritePart(input[i][j].Lower, input[i][j].Length, input[i][j].Base);
+				ar.WritePart(input[i][j]);
 			Status[tn]++;
 		}
 		ar.WriteEqual(1234567890, 4294967295);
 		Current[tn] += ProgressBarStep;
-		byte[] bytes = ar;
+		NList<byte> bytes = ar;
 		ar.Dispose();
 		return bytes;
 	}
 
-	public static byte[] WorkUpTripleList(List<List<ShortIntervalList>> input, int tn)
+	public static NList<byte> WorkUpTripleList(List<NList<ShortIntervalList>> input, int tn)
 	{
 		if (input.Any(x => x.Length == 0))
 			return [];
@@ -55,13 +56,13 @@ public static class Global
 			for (var j = 0; j < input[i].Length; j++)
 			{
 				for (var k = 0; k < input[i][j].Length; k++)
-					ar.WritePart(input[i][j][k].Lower, input[i][j][k].Length, input[i][j][k].Base);
+					ar.WritePart(input[i][j][k]);
 				Status[tn]++;
 			}
 		}
 		ar.WriteEqual(1234567890, 4294967295);
 		Current[tn] += ProgressBarStep;
-		byte[] bytes = ar;
+		NList<byte> bytes = ar;
 		ar.Dispose();
 		return bytes;
 	}
@@ -75,9 +76,9 @@ public static class Global
 	}
 }
 
-public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn)
+public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> result, int tn)
 {
-	public List<ShortIntervalList> Encode()
+	public NList<ShortIntervalList> Encode()
 	{
 		if (input.Length == 0)
 			throw new EncoderFallbackException();
@@ -99,8 +100,14 @@ public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> resu
 		var innerCount = spaces ? 2 : 1;
 		Status[tn] = 0;
 		StatusMaximum[tn] = 7;
-		var maxFrequency = 1;
-		var groups = input.GetSlice(startPos).Convert((x, index) => (elem: x[0], index)).Wrap(l => lz ? l.Filter(x => x.index < 2 || x.elem.Lower + x.elem.Length != x.elem.Base).ToNList() : l).Group(x => x.elem.Lower).Wrap(l => CreateVar(l.Max(x => x.Length), out maxFrequency) > input[startPos][0].Base * 2 || input[startPos][0].Base <= ValuesInByte ? l.NSort(x => 4294967295 - (uint)x.Length) : l);
+		var indexedInput = input.GetRange(startPos).ToNList((x, index) => (elem: x[0], index));
+		if (lz)
+			indexedInput.FilterInPlace(x => x.index < 2 || x.elem.Lower + x.elem.Length != x.elem.Base);
+		var groups = indexedInput.Group(x => x.elem.Lower);
+		var maxFrequency = groups.Max(x => x.Length);
+		var consequentElems = maxFrequency > input[startPos][0].Base * 2 || input[startPos][0].Base <= ValuesInByte + 1;
+		if (consequentElems)
+			groups.NSort(x => 4294967295 - (uint)x.Length);
 		Status[tn]++;
 		var uniqueList = groups.PConvert(x => new Interval(x[0].elem) { Base = input[startPos][0].Base });
 		Status[tn]++;
@@ -144,7 +151,7 @@ public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> resu
 		Status[tn] = 0;
 		StatusMaximum[tn] = frequencyTable.Length;
 		Current[tn] += ProgressBarStep;
-		if (maxFrequency > input[startPos][0].Base * 2 || input[startPos][0].Base <= ValuesInByte)
+		if (consequentElems)
 			for (var i = 0; i < frequencyTable.Length; i++, Status[tn]++)
 			{
 				c.Add(uniqueList[frequencyTable[i].elem]);
@@ -171,13 +178,14 @@ public class Huffman(List<ShortIntervalList> input, List<ShortIntervalList> resu
 
 public class LempelZiv
 {
-	private readonly List<ShortIntervalList> input, result;
-	private readonly int tn, huffmanIndex, threadsCount = Environment.ProcessorCount;
+	private static readonly int threadsCount = Environment.ProcessorCount;
+	private readonly NList<ShortIntervalList> input;
+	private readonly NList<ShortIntervalList> result;
+	private readonly int tn, huffmanIndex;
 	private readonly bool huffman, pixels, lw, cout, spaces;
 	private LZData lzData;
-	public const int LZDictionarySize = 32767;
 
-	public LempelZiv(List<ShortIntervalList> input, List<ShortIntervalList> result, int tn, bool cout = false)
+	public LempelZiv(NList<ShortIntervalList> input, NList<ShortIntervalList> result, int tn, bool cout = false)
 	{
 		this.input = input;
 		this.result = result;
@@ -190,7 +198,7 @@ public class LempelZiv
 		this.cout = cout;
 	}
 
-	public List<ShortIntervalList> Encode(out LZData lzData)
+	public NList<ShortIntervalList> Encode(out LZData lzData)
 	{
 		lzData = new();
 		var lzStart = 3 + (huffman ? (int)input[0][huffmanIndex + 1].Base : 0) + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : pixels ? 2 : 0);
@@ -203,15 +211,15 @@ public class LempelZiv
 		return result;
 	}
 
-	private List<ShortIntervalList> EncodeInts(int lzStart)
+	private NList<ShortIntervalList> EncodeInts(int lzStart)
 	{
-		var complexCodes = huffman && lw ? input.GetSlice(lzStart - 2).RepresentIntoNumbers((x, y) => RedStarLinq.Equals(x, y), x => x.Length switch
+		var complexCodes = huffman && lw ? input.GetRange(lzStart - 2).RepresentIntoNumbers((x, y) => RedStarLinq.Equals(x, y), x => x.Length switch
 		{
 			0 => 1234567890,
 			1 => x[0].GetHashCode(),
 			2 => x[0].GetHashCode() << 7 ^ x[1].GetHashCode(),
 			_ => (x[0].GetHashCode() << 7 ^ x[1].GetHashCode()) << 7 ^ x[^1].GetHashCode(),
-		}).ToNList(x => ((uint)x, 0u)) : input.GetSlice(lzStart - 2).ToNList((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
+		}).ToNList(x => ((uint)x, 0u)) : input.GetRange(lzStart - 2).ToNList((x, index) => (pixels && !(huffman || cout) ? x[0].Lower << 24 | x[1].Lower << 16 | x[2].Lower << 8 | x[3].Lower : x[0].Lower << 9 ^ x[0].Base, spaces ? x[^1].Lower : !pixels ? 0 : x.Length >= (huffman || cout ? 4 : 7) ? (x[^3].Lower & ValuesInByte >> 1) + (ValuesInByte >> 1) << 9 | x[^2].Lower << 8 | x[^1].Lower : x.Length >= (huffman || cout ? 2 : 5) ? x[^1].Lower : 0));
 		var (preIndexCodes, secondaryCodes) = complexCodes.NBreak();
 		var secondaryCodesActive = secondaryCodes.Any(x => x != 0);
 		Current[tn] = 0;
@@ -219,10 +227,10 @@ public class LempelZiv
 		var combined = preIndexCodes.NPairs((x, y) => (ulong)x << 32 | y);
 		var indexCodesList = combined.PGroup(tn, new EComparer<ulong>((x, y) => x == y, x => unchecked((17 * 23 + (int)(x >> 32)) * 23 + (int)x))).FilterInPlace(x => x.Group.Length >= 2);
 		combined.Dispose();
-		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.NSort());
+		var indexCodes = indexCodesList.Sort(x => x.Key).PToArray(col => col.Group.Sort());
 		indexCodesList.Dispose();
 		var startKGlobal = 2;
-		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>(65));
+		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, uint length, uint spiralLength)>(65));
 		uint useSpiralLengths = 0;
 		var maxLevel = Max(BitsCount(LZDictionarySize) / 2 - 5, 0);
 		Status[tn] = 0;
@@ -235,18 +243,18 @@ public class LempelZiv
 		secondaryCodes.Dispose();
 		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToNList();
 		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
-		void FindMatchesRecursive(uint[] ic, int level)
+		void FindMatchesRecursive(NList<uint> ic, int level)
 		{
 			if (level < maxLevel)
 			{
-				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray(index => ic[index]).NSort());
+				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).GroupIndexes(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToNList(index => ic[index]).Sort());
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
 			else if (ic.Length > 1)
 				FindMatches(ic, level + startKGlobal);
 		}
-		void FindMatches(uint[] ic, int startK)
+		void FindMatches(NList<uint> ic, int startK)
 		{
 			var nextTarget = 0;
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
@@ -254,69 +262,64 @@ public class LempelZiv
 				var iIC = (int)ic[i];
 				if (iIC < nextTarget)
 					continue;
-				var matches = ic.GetSlice((CreateVar(Array.BinarySearch(ic, 0, i, (uint)Max(iIC - LZDictionarySize, 0)), out var found) >= 0 ? found : ~found)..i).Filter(jIC => iIC - jIC >= 2 && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, (int)jIC, startK) == startK)).ToNList();
-				var ub = preIndexCodes.Length - iIC - 1;
-				if (matches.Length == 0 || ub < startK)
-					continue;
-				var lastMatch = (int)matches[^1];
-				var k = startK;
-				for (; k <= ub && matches.Length > 1; k++)
+				var found = ic.BinarySearch(0, i, (uint)Max(iIC - LZDictionarySize, 0));
+				var matches = ic.GetSlice((found >= 0 ? found : ~found)..(ic[i - 1] == ic[i] - 1 ? i - 1 : i)).Filter(jIC => iIC - jIC >= 2 && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, (int)jIC, startK) == startK)).ToNList();
+				var length = 0;
+				for (var j = matches.Length - 1; j >= 0; j--)
 				{
-					lastMatch = (int)matches[^1];
-					matches.FilterInPlace(jIC => complexCodes[iIC + k] == complexCodes[(int)(jIC + k)] && !(k > 65537 && k <= iIC - jIC));
-					if (k == ub || matches.Length == 0 || iIC - matches[^1] >= (iIC - lastMatch) << 3 && lastMatch - matches[^1] >= 64) break;
-				}
-				if (matches.Length == 1)
-				{
-					lastMatch = (int)matches[^1];
-					var ub2 = Min(ub, iIC - lastMatch > 65537 ? 65537 : (int)Min((long)(iIC - lastMatch) * (ushort.MaxValue + 1) - 1, int.MaxValue));
-					k += complexCodes.Compare(iIC + k, complexCodes, lastMatch + k, ub2 - k + 1);
-				}
-				var product = 1d;
-				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
-					continue;
-				var sl = (ushort)Clamp(k / (iIC - lastMatch) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - lastMatch - k, 0), (ushort)Min(k - 2, iIC - lastMatch - 2), sl, PrimitiveType.UShortType);
-				if (sl > 0)
-				{
-					nextTarget = lastMatch + k;
-					useSpiralLengths = 1;
+					var jIC = (int)matches[j];
+					if (iIC - jIC < 2)
+						continue;
+					var k = complexCodes.Compare(iIC + startK, complexCodes, jIC + startK) + startK;
+					if (k - 2 <= length)
+						continue;
+					length = k - 2;
+					var product = 1d;
+					if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
+						continue;
+					var sl = (ushort)Clamp(length / (iIC - jIC) - 1, 0, ushort.MaxValue);
+					UpdateRepeatsInfo(repeatsInfo, lockObj, new((uint)(iIC + lzStart - 2), ((uint)Max(iIC - jIC - length - 2, 0), (uint)Min(length, iIC - jIC - 2), sl)));
+					if (sl > 0)
+					{
+						nextTarget = jIC + k;
+						useSpiralLengths = 1;
+					}
 				}
 			}
 		}
-		void FindMatches2(uint[] ic, int k)
+		void FindMatches2(NList<uint> ic, int k)
 		{
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
 				var jIC = (int)ic[i - 1];
-				if (!(iIC - jIC is >= 2 and < LZDictionarySize && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, jIC, k) == k)))
+				if (!(iIC - jIC >= 2 && iIC - jIC < LZDictionarySize && (!secondaryCodesActive || secondaryCodes.Compare(iIC, secondaryCodes, jIC, k) == k)))
 					continue;
 				var product = 1d;
 				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, new((uint)(iIC + lzStart - 2), ((uint)Max(iIC - jIC - k, 0), (uint)Min(k - 2, iIC - jIC - 2), sl)));
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
 		}
 	}
 
-	private List<ShortIntervalList> EncodeBytes(int lzStart)
+	private NList<ShortIntervalList> EncodeBytes(int lzStart)
 	{
-		var preIndexCodes = input.GetSlice(lzStart - 2).Convert(x => (byte)x[0].Lower);
+		var preIndexCodes = input.GetRange(lzStart - 2).Convert(x => (byte)x[0].Lower);
 		if (preIndexCodes.Length < 5)
 			return LempelZivDummy(input);
 		Current[tn] = 0;
 		CurrentMaximum[tn] = ProgressBarStep * 3;
-		var combined = preIndexCodes.GetSlice().NCombine(preIndexCodes.GetSlice(1), preIndexCodes.GetSlice(2), (x, y, z) => ((uint)x << 8 | y) << 8 | z);
+		var combined = preIndexCodes.NCombine(preIndexCodes.GetRange(1), preIndexCodes.GetRange(2), (x, y, z) => ((uint)x << 8 | y) << 8 | z);
 		var indexCodesList = combined.PGroup(tn).FilterInPlace(x => x.Group.Length >= 2);
 		combined.Dispose();
-		var indexCodes = indexCodesList.NSort(x => x.Key).PToArray(col => col.Group.NSort());
+		var indexCodes = indexCodesList.NSort(x => x.Key).PToArray(col => col.Group.Sort());
 		indexCodesList.Dispose();
 		var startKGlobal = 3;
-		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, ushort length, ushort spiralLength)>());
+		var repeatsInfo = RedStarLinq.FillArray(threadsCount, _ => new Dictionary<uint, (uint dist, uint length, uint spiralLength)>());
 		uint useSpiralLengths = 0;
 		var maxLevel = Max(BitsCount(LZDictionarySize) / 2 - 5, 0);
 		Status[tn] = 0;
@@ -327,18 +330,19 @@ public class LempelZiv
 		preIndexCodes.Dispose();
 		var repeatsInfoSum = repeatsInfo.ConvertAndJoin(x => x).ToNList();
 		return WriteLZ(input, lzStart, repeatsInfoSum, useSpiralLengths);
-		void FindMatchesRecursive(uint[] ic, int level)
+		void FindMatchesRecursive(NList<uint> ic, int level)
 		{
 			if (level < maxLevel)
 			{
-				var nextCodes = ic.GetSlice(..(ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0)).Group(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToArray());
+				var endIndex = ic[^1] == preIndexCodes.Length - level - startKGlobal ? ^1 : ^0;
+				var nextCodes = ic.GetSlice(..endIndex).Group(iIC => preIndexCodes[(int)iIC + level + startKGlobal]).FilterInPlace(x => x.Length >= 2).Convert(x => x.ToNList());
 				nextCodes.ForEach(x => FindMatchesRecursive(x, level + 1));
 				FindMatches2(ic, level + startKGlobal);
 			}
 			else if (ic.Length > 1)
 				FindMatches(ic, level + startKGlobal);
 		}
-		void FindMatches(uint[] ic, int startK)
+		void FindMatches(NList<uint> ic, int startK)
 		{
 			var nextTarget = 0;
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
@@ -346,7 +350,8 @@ public class LempelZiv
 				var iIC = (int)ic[i];
 				if (iIC < nextTarget)
 					continue;
-				var matches = ic.GetSlice((CreateVar(Array.BinarySearch(ic, 0, i, (uint)Max(iIC - LZDictionarySize, 0)), out var found) >= 0 ? found : ~found)..(ic[i - 1] == ic[i] - 1 ? i - 1 : i));
+				var found = ic.BinarySearch(0, i, (uint)Max(iIC - LZDictionarySize, 0));
+				var matches = ic.GetSlice((found >= 0 ? found : ~found)..(ic[i - 1] == ic[i] - 1 ? i - 1 : i));
 				var length = 0;
 				for (var j = matches.Length - 1; j >= 0; j--)
 				{
@@ -357,8 +362,11 @@ public class LempelZiv
 					if (k - 2 <= length)
 						continue;
 					length = k - 2;
+					var product = 1d;
+					if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
+						continue;
 					var sl = (ushort)Clamp(length / (iIC - jIC) - 1, 0, ushort.MaxValue);
-					UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - length - 2, 0), (ushort)Min(length, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+					UpdateRepeatsInfo(repeatsInfo, lockObj, new((uint)(iIC + lzStart - 2), ((uint)Max(iIC - jIC - length - 2, 0), (uint)Min(length, iIC - jIC - 2), sl)));
 					if (sl > 0)
 					{
 						nextTarget = jIC + k;
@@ -367,61 +375,62 @@ public class LempelZiv
 				}
 			}
 		}
-		void FindMatches2(uint[] ic, int k)
+		void FindMatches2(NList<uint> ic, int k)
 		{
 			for (var i = 1; i < ic.Length; i++, Status[tn]++)
 			{
 				var iIC = (int)ic[i];
 				var jIC = (int)ic[i - 1];
-				if (iIC - jIC is < 2 or >= LZDictionarySize)
+				if (iIC - jIC < 2 || iIC - jIC >= LZDictionarySize)
 					continue;
 				var product = 1d;
 				if (input.GetSlice(iIC + lzStart - 2, k).All(x => (product *= x.Product(y => (double)y.Base / y.Length)) < 21d * LZDictionarySize * k))
 					continue;
 				var sl = (ushort)Clamp(k / (iIC - jIC) - 1, 0, ushort.MaxValue);
-				UpdateRepeatsInfo(repeatsInfo, lockObj, threadsCount, iIC + lzStart - 2, (uint)Max(iIC - jIC - k, 0), (ushort)Min(k - 2, iIC - jIC - 2), sl, PrimitiveType.UShortType);
+				UpdateRepeatsInfo(repeatsInfo, lockObj, new((uint)(iIC + lzStart - 2), ((uint)Max(iIC - jIC - k, 0), (uint)Min(k - 2, iIC - jIC - 2), sl)));
 				if (sl > 0)
 					useSpiralLengths = 1;
 			}
 		}
 	}
 
-	public static void UpdateRepeatsInfo<T>(Dictionary<uint, (uint dist, T length, T spiralLength)>[] repeatsInfo, object[] lockObj, int threadsCount, int key, uint dist, T length, T sl, PrimitiveType type) where T : unmanaged
+	public static void UpdateRepeatsInfo(Dictionary<uint, (uint dist, uint length, uint spiralLength)>[] repeatsInfo, object[] lockObj, LZEntry entry)
 	{
-		if (repeatsInfo[key % threadsCount].TryGetValue((uint)key, out var value))
+		var (key, (dist, length, sl)) = entry;
+		if (repeatsInfo[key % threadsCount].TryGetValue(key, out var value))
 		{
-			if ((ToInt(length, type) + 2) * (ToInt(sl, type) + 1) > (ToInt(value.length, type) + 2) * (ToInt(value.spiralLength, type) + 1))
+			if ((length + 2) * (sl + 1) > (value.length + 2) * (value.spiralLength + 1))
 				lock (lockObj[key % threadsCount])
-					repeatsInfo[key % threadsCount][(uint)key] = (dist, length, sl);
+					repeatsInfo[key % threadsCount][key] = (dist, length, sl);
 			return;
 		}
 		lock (lockObj[key % threadsCount])
 		{
-			if (repeatsInfo[key % threadsCount].ContainsKey((uint)key))
+			if (repeatsInfo[key % threadsCount].ContainsKey(key))
 				return;
-			repeatsInfo[key % threadsCount].TryAdd((uint)key, (dist, length, sl));
+			repeatsInfo[key % threadsCount].TryAdd(key, (dist, length, sl));
 		}
 	}
 
-	private List<ShortIntervalList> WriteLZ(List<ShortIntervalList> input, int lzStart, NList<LZEntry> repeatsInfo, uint useSpiralLengths)
+	private NList<ShortIntervalList> WriteLZ(NList<ShortIntervalList> input, int lzStart, NList<LZEntry> repeatsInfo, uint useSpiralLengths)
 	{
 		if (repeatsInfo.Length == 0)
 			return LempelZivDummy(input);
-		LZRequisites(input.Length, 1, repeatsInfo, out var boundIndex, out var repeatsInfoList, out var starts, out var dists, out var lengths, out var spiralLengths, out var maxDist, out var maxLength, out var maxSpiralLength, out var rDist, out var thresholdDist, out var rLength, out var thresholdLength, out var rSpiralLength, out var thresholdSpiralLength, PrimitiveType.UShortType);
+		LZRequisites(input.Length, 1, repeatsInfo, out var boundIndex, out var repeatsInfoList, out var stats, out var maxDist, out var maxLength, out var maxSpiralLength, out var rDist, out var thresholdDist, out var rLength, out var thresholdLength, out var rSpiralLength, out var thresholdSpiralLength);
 		result.Replace(input);
 		result[0] = new(result[0]);
 		Status[tn] = 0;
-		StatusMaximum[tn] = starts.Length;
+		StatusMaximum[tn] = stats.starts.Length;
 		Current[tn] += ProgressBarStep;
 		BitList elementsReplaced = new(result.Length, false);
-		WriteLZMatches(input, lzStart, useSpiralLengths, starts[..boundIndex], dists, lengths, spiralLengths, maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, PrimitiveType.UShortType);
+		WriteLZMatches(input, lzStart, useSpiralLengths, (stats.starts[..boundIndex], stats.dists, stats.lengths, stats.spiralLengths), maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced);
 		var sortedRepeatsInfo2 = repeatsInfoList.PConvert(l => l.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength)));
 		repeatsInfoList.ForEach(x => x.Dispose());
 		repeatsInfoList.Dispose();
 		var brokenRepeatsInfo = sortedRepeatsInfo2.PConvert(l => (l.Item1, l.Item2.PNBreak()));
 		sortedRepeatsInfo2.ForEach(x => x.Item2.Dispose());
 		sortedRepeatsInfo2.Dispose();
-		void ProcessBrokenRepeats((NList<uint>, (NList<uint>, NList<ushort>, NList<ushort>)) x) => WriteLZMatches(input, lzStart, useSpiralLengths, x.Item1, x.Item2.Item1, x.Item2.Item2, x.Item2.Item3, maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, PrimitiveType.UShortType, false);
+		void ProcessBrokenRepeats((NList<uint>, (NList<uint>, NList<uint>, NList<uint>)) x) => WriteLZMatches(input, lzStart, useSpiralLengths, (x.Item1, x.Item2.Item1, x.Item2.Item2, x.Item2.Item3), maxDist, maxLength, maxSpiralLength, rDist, thresholdDist, rLength, thresholdLength, rSpiralLength, thresholdSpiralLength, elementsReplaced, false);
 		if (pixels || cout)
 			brokenRepeatsInfo.ForEach(ProcessBrokenRepeats);
 		else
@@ -436,7 +445,7 @@ public class LempelZiv
 		c.Add(new Interval((uint)rLength, 3));
 		c.WriteCount(maxLength, 16);
 		if (rLength != 0)
-			c.Add(new(thresholdLength, (uint)maxLength + 1));
+			c.Add(new(thresholdLength, maxLength + 1));
 		if (maxDist == 0 && maxLength == 0)
 			c.Add(new(1, 2));
 		c.Add(new Interval(useSpiralLengths, 2));
@@ -445,7 +454,7 @@ public class LempelZiv
 			c.Add(new Interval((uint)rSpiralLength, 3));
 			c.WriteCount(maxSpiralLength, 16);
 			if (rSpiralLength != 0)
-				c.Add(new(thresholdSpiralLength, (uint)maxSpiralLength + 1));
+				c.Add(new(thresholdSpiralLength, maxSpiralLength + 1));
 		}
 #if DEBUG
 		var input2 = input.Skip(lzStart - 2);
@@ -468,36 +477,56 @@ public class LempelZiv
 		return result;
 	}
 
-	public static void LZRequisites<T>(int inputLength, int multiplier, NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>> repeatsInfo, out int boundIndex, out List<NList<G.KeyValuePair<uint, (uint dist, T length, T spiralLength)>>> repeatsInfoList, out NList<uint> starts, out NList<uint> dists, out NList<T> lengths, out NList<T> spiralLengths, out uint maxDist, out T maxLength, out T maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength, PrimitiveType type) where T : unmanaged
+	public static void LZRequisites(int inputLength, int multiplier, NList<LZEntry> repeatsInfo, out int boundIndex, out List<NList<LZEntry>> repeatsInfoParts, out LZStats stats, out uint maxDist, out uint maxLength, out uint maxSpiralLength, out int rDist, out uint thresholdDist, out int rLength, out uint thresholdLength, out int rSpiralLength, out uint thresholdSpiralLength)
 	{
-		var repeatsInfoList2 = repeatsInfo.Sort(x => x.Key).Sort(x => 4294967295 - (uint)((ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 2));
-		var boundIndex2 = boundIndex = repeatsInfoList2.FindIndex(x => (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) < multiplier * 10);
+		var sortedRepeatsInfo = repeatsInfo.Sort(x => x.Key).Sort(x => 4294967295 - GetMatchLength(x));
+		boundIndex = sortedRepeatsInfo.FindIndex(x => GetMatchLength(x) < multiplier * 10);
 		if (boundIndex == -1)
-			boundIndex2 = boundIndex = repeatsInfoList2.Length;
+			boundIndex = sortedRepeatsInfo.Length;
 		var processorBlockLength = GetArrayLength(inputLength, Environment.ProcessorCount);
-		repeatsInfoList = RedStarLinq.PFill(Environment.ProcessorCount, index => repeatsInfoList2[boundIndex2..].Filter(x => x.Key / processorBlockLength == index && (x.Key + (ToInt(x.Value.length, type) + 2) * (ToInt(x.Value.spiralLength, type) + 1) - 1) / processorBlockLength == index));
-		var sortedRepeatsInfo = repeatsInfoList2.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength));
-		repeatsInfoList2.Dispose();
-		(starts, (dists, lengths, spiralLengths)) = (sortedRepeatsInfo.Item1, sortedRepeatsInfo.Item2.PNBreak());
-		sortedRepeatsInfo.Item2.Dispose();
-		(var distsSum, maxDist) = dists.Wrap(l => (l.Sum(), l.Max()));
-		((var lengthsSum, maxLength), (var spiralLengthsSum, maxSpiralLength)) = new[] { lengths, spiralLengths }.PNConvert(l => (l.Sum(x => ToUInt(x, type)), l.Max())).Wrap(x => (x[0], x[1]));
+		repeatsInfoParts = RedStarLinq.PFill(Environment.ProcessorCount, index => new NList<LZEntry>());
+		var repeatsInfoEnd = sortedRepeatsInfo[boundIndex..];
+		for (var i = 0; i < repeatsInfoEnd.Length; i++)
+		{
+			var x = repeatsInfoEnd[i];
+			var index = (int)x.Key / processorBlockLength;
+			if ((x.Key + GetMatchLength(x) - 1) / processorBlockLength == index)
+				repeatsInfoParts[index].Add(x);
+		}
+		var brokenRepeatsInfo = sortedRepeatsInfo.PNBreak(x => x.Key, x => (x.Value.dist, x.Value.length, x.Value.spiralLength));
+		sortedRepeatsInfo.Dispose();
+		var (starts, (dists, lengths, spiralLengths)) = (brokenRepeatsInfo.Item1, brokenRepeatsInfo.Item2.PNBreak());
+		brokenRepeatsInfo.Item2.Dispose();
+		var sumsAndMaximums = new[] { dists, lengths, spiralLengths }.PNConvert(l => (l.Sum(), l.Max())).Wrap(x => (x[0], x[1], x[2]));
+		((var distsSum, maxDist), (var lengthsSum, maxLength), (var spiralLengthsSum, maxSpiralLength)) = sumsAndMaximums;
 		var mediumDist = (int)Max(distsSum / dists.Length, 1);
-		(rDist, thresholdDist) = CreateVar(dists.Count(x => x >= mediumDist), out var n) <= dists.Length / 3 ? (1, dists.Filter(x => x < mediumDist).Max()) : (n > dists.Length * 2 / 3) ? (2, dists.Filter(x => x >= mediumDist).Min()) : (0, 0);
+		(rDist, thresholdDist) = GetRAndThreshold(dists, mediumDist);
 		var mediumLength = (int)Max(lengthsSum / lengths.Length, 1);
-		(rLength, thresholdLength) = CreateVar(lengths.Count(x => ToInt(x, type) >= mediumLength), out n) <= lengths.Length / 3 ? (1, ToUInt(lengths.Filter(x => ToInt(x, type) < mediumLength).Max(), type)) : (n > lengths.Length * 2 / 3) ? (2, ToUInt(lengths.Filter(x => ToInt(x, type) >= mediumLength).Min(), type)) : (0, 0);
+		(rLength, thresholdLength) = GetRAndThreshold(lengths, mediumLength);
 		var mediumSpiralLength = (int)Max(spiralLengthsSum / spiralLengths.Length, 1);
-		(rSpiralLength, thresholdSpiralLength) = CreateVar(spiralLengths.Count(x => ToInt(x, type) >= mediumSpiralLength), out n) <= spiralLengths.Length / 3 ? (1, ToUInt(spiralLengths.Filter(x => ToInt(x, type) < mediumSpiralLength).Max(), type)) : (n > spiralLengths.Length * 2 / 3) ? (2, ToUInt(spiralLengths.Filter(x => ToInt(x, type) >= mediumSpiralLength).Min(), type)) : (0, 0);
+		(rSpiralLength, thresholdSpiralLength) = GetRAndThreshold(spiralLengths, mediumSpiralLength);
+		stats = (starts, dists, lengths, spiralLengths);
 	}
 
-	private void WriteLZMatches<T>(List<ShortIntervalList> input, int lzStart, uint useSpiralLengths, NList<uint> starts, NList<uint> dists, NList<T> lengths, NList<T> spiralLengths, uint maxDist, T maxLength, T maxSpiralLength, int rDist, uint thresholdDist, int rLength, uint thresholdLength, int rSpiralLength, uint thresholdSpiralLength, BitList elementsReplaced, PrimitiveType type, bool changeBase = true) where T : unmanaged
+	private static (int, uint) GetRAndThreshold(NList<uint> list, int medium)
+	{
+		var upperCount = list.Count(x => x >= medium);
+		if (upperCount <= list.Length / 3)
+			return (1, list.Filter(x => x < medium).Max());
+		else if (upperCount > list.Length * 2 / 3)
+			return (2, list.Filter(x => x >= medium).Min());
+		else
+			return (0, 0);
+	}
+
+	private void WriteLZMatches(NList<ShortIntervalList> input, int lzStart, uint useSpiralLengths, LZStats stats, uint maxDist, uint maxLength, uint maxSpiralLength, int rDist, uint thresholdDist, int rLength, uint thresholdLength, int rSpiralLength, uint thresholdSpiralLength, BitList elementsReplaced, bool changeBase = true)
 	{
 		double statesNumLog1, statesNumLog2;
-		for (var i = 0; i < starts.Length; i++, Status[tn]++)
+		for (var i = 0; i < stats.starts.Length; i++, Status[tn]++)
 		{
-			uint iDist = dists[i], iLength = ToUInt(lengths[i], type), iSpiralLength = ToUInt(spiralLengths[i], type);
+			uint iDist = stats.dists[i], iLength = stats.lengths[i], iSpiralLength = stats.spiralLengths[i];
 			var localMaxLength = (iLength + 2) * (iSpiralLength + 1) - 2;
-			var iStart = (int)starts[i];
+			var iStart = (int)stats.starts[i];
 			var oldBase = input[iStart][0].Base;
 			var newBase = GetBaseWithBuffer(oldBase, spaces || pixels);
 			statesNumLog1 = 0;
@@ -513,13 +542,13 @@ public class LempelZiv
 				statesNumLog1 += input[k].Sum(x => Log(x.Base) - Log(x.Length));
 			statesNumLog2 = Log(newBase) - Log(newBase - oldBase);
 			statesNumLog2 += StatesNumLogSum(iDist, rDist, maxDist, thresholdDist, useSpiralLengths);
-			statesNumLog2 += StatesNumLogSum(iLength, rLength, ToUInt(maxLength, type), thresholdLength);
+			statesNumLog2 += StatesNumLogSum(iLength, rLength, maxLength, thresholdLength);
 			if (useSpiralLengths == 1 && iLength < localMaxLength)
-				statesNumLog2 += StatesNumLogSum(iSpiralLength, rSpiralLength, ToUInt(maxSpiralLength, type), thresholdSpiralLength);
+				statesNumLog2 += StatesNumLogSum(iSpiralLength, rSpiralLength, maxSpiralLength, thresholdSpiralLength);
 			if (statesNumLog1 <= statesNumLog2)
 				continue;
 			ShortIntervalList b = [new(oldBase, newBase - oldBase, newBase)];
-			WriteLZValue(b, iLength, rLength, ToUInt(maxLength, type), thresholdLength);
+			WriteLZValue(b, iLength, rLength, maxLength, thresholdLength);
 			var maxDist2 = Min(maxDist, (uint)(iStart - iLength - lzStart));
 			if (useSpiralLengths == 0)
 				WriteLZValue(b, iDist, rDist, maxDist2, thresholdDist);
@@ -541,14 +570,14 @@ public class LempelZiv
 				}
 			}
 			if (useSpiralLengths == 1 && iLength < localMaxLength)
-				WriteLZValue(b, iSpiralLength, rSpiralLength, ToUInt(maxSpiralLength, type), thresholdSpiralLength);
+				WriteLZValue(b, iSpiralLength, rSpiralLength, maxSpiralLength, thresholdSpiralLength);
 			result[iStart] = new(b);
 			elementsReplaced.SetAll(true, iStart + 1, (int)localMaxLength + 1);
 		}
-		starts.Dispose();
-		dists.Dispose();
-		lengths.Dispose();
-		spiralLengths.Dispose();
+		stats.starts.Dispose();
+		stats.dists.Dispose();
+		stats.lengths.Dispose();
+		stats.spiralLengths.Dispose();
 		if (!changeBase)
 			return;
 		Parallel.For(lzStart, result.Length, i =>
@@ -610,7 +639,9 @@ public class LempelZiv
 		}
 	}
 
-	private List<ShortIntervalList> LempelZivDummy(List<ShortIntervalList> input)
+	private static uint GetMatchLength(LZEntry x) => (x.Value.length + 2) * (x.Value.spiralLength + 1);
+
+	private NList<ShortIntervalList> LempelZivDummy(NList<ShortIntervalList> input)
 	{
 		result.Replace(input);
 		result[0] = new(result[0]) { LempelZivDummyApplied };
@@ -637,54 +668,99 @@ public class RLE(NList<byte> input, int tn)
 		StatusMaximum[tn] = input.Length;
 		for (var i = 0; i < input.Length;)
 		{
-			result.Add(input[i++]);
+			result.Add(input[Status[tn] = i++]);
 			if (i == input.Length)
 				break;
 			var j = i;
 			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] == input[i - 1])
-				i++;
+				Status[tn] = i++;
 			if (i != j)
 			{
-				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [(byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 1)))]);
+				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 1)))]);
 				continue;
 			}
 			j = i;
 			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] != input[i - 1])
-				i++;
+				Status[tn] = i++;
 			i--;
-			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice(j..i));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice(j..i));
 		}
 		return result;
 	}
 
-	public NList<byte> RLE3()
+	public NList<byte> RLE3(bool updateStatus = true)
 	{
 		NList<byte> result = [];
 		if (input.Length < 3 || input.Length % 3 != 0)
 			return input;
 		var length = input.Length / 3;
+		if (updateStatus)
+		{
+			Current[tn] = 0;
+			CurrentMaximum[tn] = 0;
+			Status[tn] = 0;
+			StatusMaximum[tn] = length;
+		}
+		for (var i = 0; i < length;)
+		{
+			result.AddRange(input.GetSlice(i++ * 3, 3));
+			if (updateStatus)
+				Status[tn]++;
+			if (i == length)
+				break;
+			var j = i;
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) == 3)
+			{
+				i++;
+				if (updateStatus)
+					Status[tn]++;
+			}
+			if (i != j)
+			{
+				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 1)))]);
+				continue;
+			}
+			j = i;
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
+			{
+				i++;
+				if (updateStatus)
+					Status[tn]++;
+			}
+			i--;
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice((j * 3)..(i * 3)));
+		}
+		return result;
+	}
+
+	public NList<byte> RLEN(int n)
+	{
+		if (input.Length < n || input.Length % n != 0)
+			return input;
+		NList<byte> result = [];
+		var length = input.Length / n;
 		Current[tn] = 0;
 		CurrentMaximum[tn] = 0;
 		Status[tn] = 0;
 		StatusMaximum[tn] = length;
 		for (var i = 0; i < length;)
 		{
-			result.AddRange(input.GetSlice(i++ * 3, 3));
+			result.AddRange(input.GetSlice(i++ * n, n));
 			if (i == length)
 				break;
 			var j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) == 3)
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * n, input, (i - 1) * n, n) == n)
 				i++;
 			if (i != j)
 			{
-				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [(byte)((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 1)))]);
+				result.AddRange(i - j < ValuesInByte >> 1 ? [(byte)(i - j - 1)] : [((ValuesInByte >> 1) - 1), (byte)((i - j - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 1)))]);
 				continue;
 			}
 			j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
+			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * n, input, (i - 1) * n, n) != n)
 				i++;
 			i--;
-			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(byte)(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice((j * 3)..(i * 3)));
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice((j * n)..(i * n)));
 		}
 		return result;
 	}

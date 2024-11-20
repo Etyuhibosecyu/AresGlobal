@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>AresGlobalMethods</RootNamespace>
-    <Nullable>enable</Nullable>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<RootNamespace>AresGlobalMethods</RootNamespace>
+		<Nullable>enable</Nullable>
 		<CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
 	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\UnsafeFunctions\UnsafeFunctions.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\UnsafeFunctions\UnsafeFunctions.csproj" />
+	</ItemGroup>
 
 </Project>
