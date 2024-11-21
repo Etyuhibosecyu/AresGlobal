@@ -1,12 +1,12 @@
 ﻿
 namespace AresGlobalMethods;
 
-public class AdaptiveHuffmanDecGlobal : IDisposable
+public class AdaptiveHuffmanDec : IDisposable
 {
 	protected GlobalDecoding decoding = default!;
 	protected ArithmeticDecoder ar = default!;
 	protected NList<ShortIntervalList> result = default!;
-	protected NList<byte> skipped = default!;
+	protected NList<uint> skipped = default!;
 	protected SumSet<uint> set = default!, newItems = default!;
 	protected NList<Interval> uniqueList = default!;
 	protected LZData lzData = default!;
@@ -16,7 +16,7 @@ public class AdaptiveHuffmanDecGlobal : IDisposable
 	protected int lzLength;
 	protected uint firstIntervalDist;
 
-	public AdaptiveHuffmanDecGlobal(GlobalDecoding decoding, ArithmeticDecoder ar, NList<byte> skipped, LZData lzData, int lz, int bwt, int blockIndex, int bwtBlockSize, int counter)
+	public AdaptiveHuffmanDec(GlobalDecoding decoding, ArithmeticDecoder ar, NList<uint> skipped, LZData lzData, int lz, int bwt, int blockIndex, int bwtBlockSize, int counter)
 	{
 		this.decoding = decoding;
 		this.ar = ar;
@@ -43,7 +43,7 @@ public class AdaptiveHuffmanDecGlobal : IDisposable
 		}
 	}
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		set?.Dispose();
 		uniqueList?.Dispose();
@@ -78,11 +78,11 @@ public class AdaptiveHuffmanDecGlobal : IDisposable
 		var skippedCount = (int)ar.ReadCount();
 		var @base = skippedCount == 0 ? 1 : ar.ReadCount();
 		(newItems = []).AddSeries((int)@base, index => ((uint)index, 1));
-		if (skippedCount > @base || @base > ValuesInByte)
+		if (skippedCount > @base || @base > (blockIndex == 2 ? GetFragmentLength() : ValuesInByte))
 			throw new DecoderFallbackException();
 		for (var i = 0; i < skippedCount; i++)
 		{
-			skipped.Add((byte)newItems[ar.ReadPart(newItems)].Key);
+			skipped.Add(newItems[ar.ReadPart(newItems)].Key);
 			newItems.RemoveValue(skipped[^1]);
 		}
 		counter -= skippedCount == 0 ? 1 : (skippedCount + 9) / 8;

@@ -8,7 +8,7 @@ public record class PPM(int TN) : IDisposable
 	private int doubleListsCompleted = 0;
 	private readonly object lockObj = new();
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		ar.Dispose();
 		outputIntervals.Dispose();
@@ -79,7 +79,7 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 	private readonly NList<Interval> intervalsForBuffer = [];
 	private int lzBufferIndex, lzBlockEnd = 0;
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		globalFreqTable?.Dispose();
 		newItemsFreqTable?.Dispose();

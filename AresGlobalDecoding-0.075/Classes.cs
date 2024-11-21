@@ -14,7 +14,7 @@ public class ArithmeticEncoder : IDisposable
 
 	public int Length => bits.Length;
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		bits.Dispose();
 		GC.SuppressFinalize(this);
@@ -131,7 +131,7 @@ public class ArithmeticDecoder : IDisposable
 		pos = Min(32, bits.Length);
 	}
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		bits.Dispose();
 		GC.SuppressFinalize(this);

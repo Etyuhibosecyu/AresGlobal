@@ -32,7 +32,7 @@ public class PPMDec : IDisposable
 		Initialize();
 	}
 
-	public void Dispose()
+	public virtual void Dispose()
 	{
 		set?.Dispose();
 		excludingSet?.Dispose();
