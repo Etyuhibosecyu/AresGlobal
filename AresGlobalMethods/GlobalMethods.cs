@@ -76,72 +76,29 @@ public static class Global
 
 public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> result, int tn)
 {
+	private bool lz, lzDummy, spaces, consequentElems;
+	private int bwtIndex, lzIndex, lzDummyIndex, bwtLength, lzHeaderLength, startPos, lzPos, maxFrequency;
+	private NList<Interval> uniqueList = default!;
+	private NList<int> indexCodes = default!, frequency = default!;
+	private NList<(int elem, int freq)> frequencyTable = default!;
+
 	public NList<ShortIntervalList> Encode()
 	{
 		if (input.Length == 0)
 			throw new EncoderFallbackException();
-		var bwtIndex = input[0].IndexOf(BWTApplied);
+		bwtIndex = input[0].IndexOf(BWTApplied);
 		if (CreateVar(input[0].IndexOf(HuffmanApplied), out var huffmanIndex) != -1 && (bwtIndex == -1 || huffmanIndex != bwtIndex + 1))
 			return input;
-		Current[tn] = 0;
-		CurrentMaximum[tn] = ProgressBarStep * 2;
-		result.Replace(input);
-		result[0] = new(result[0]);
-		var lz = CreateVar(input[0].IndexOf(LempelZivApplied), out var lzIndex) != -1 && (bwtIndex == -1 || lzIndex != bwtIndex + 1);
-		var lzDummy = CreateVar(input[0].IndexOf(LempelZivDummyApplied), out var lzDummyIndex) != -1 && (bwtIndex == -1 || lzDummyIndex != bwtIndex + 1);
-		var bwtLength = bwtIndex != -1 ? (int)input[0][bwtIndex + 1].Base : 0;
-		var startPos = (lz || lzDummy ? (input[0].Length >= lzIndex + 2 && input[0][lzIndex + 1] == LempelZivSubdivided ? 3 : 2) : 1) + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : 0) + bwtLength;
-		var lzPos = bwtIndex != -1 ? 4 : 2;
+		Prerequisites();
 		if (input.Length < startPos + 2)
 			return input;
-		var spaces = input[0].Length >= 2 && input[0][1] == SpacesApplied;
-		var innerCount = spaces ? 2 : 1;
+		spaces = input[0].Length >= 2 && input[0][1] == SpacesApplied;
 		Status[tn] = 0;
 		StatusMaximum[tn] = 7;
-		var indexedInput = input.GetRange(startPos).ToNList((x, index) => (elem: x[0], index));
-		if (lz)
-			indexedInput.FilterInPlace(x => x.index < 2 || x.elem.Lower + x.elem.Length != x.elem.Base);
-		var groups = indexedInput.Group(x => x.elem.Lower);
-		var maxFrequency = groups.Max(x => x.Length);
-		var consequentElems = maxFrequency > input[startPos][0].Base * 2 || input[startPos][0].Base <= ValuesInByte + 1;
-		if (consequentElems)
-			groups.NSort(x => 4294967295 - (uint)x.Length);
+		ProcessGroups(input, tn);
+		frequency = frequencyTable.PNConvert(x => x.freq);
 		Status[tn]++;
-		var uniqueList = groups.PConvert(x => new Interval(x[0].elem) { Base = input[startPos][0].Base });
-		Status[tn]++;
-		var indexCodes = RedStarLinq.NEmptyList<int>(input.Length - startPos);
-		for (var i = 0; i < groups.Length; i++)
-			foreach (var (elem, index) in groups[i])
-				indexCodes[index] = i;
-		Status[tn]++;
-		NList<(int elem, int freq)> frequencyTable = groups.PNConvert((x, index) => (index, x.Length));
-		groups.Dispose();
-		Status[tn]++;
-		var frequency = frequencyTable.PNConvert(x => x.freq);
-		Status[tn]++;
-		var intervalsBase = (uint)frequency.Sum();
-		uint a = 0;
-		var arithmeticMap = frequency.ToNList(x => a += (uint)x);
-		Status[tn]++;
-		if (lz)
-			intervalsBase = GetBaseWithBuffer(arithmeticMap[^1], spaces);
-		var frequencyIntervals = arithmeticMap.Prepend(0u).GetROLSlice(0, arithmeticMap.Length).ToNList((x, index) => new Interval(x, (uint)frequency[index], intervalsBase));
-		Status[tn]++;
-		Interval lzInterval = lz ? new(arithmeticMap[^1], intervalsBase - arithmeticMap[^1], intervalsBase) : new();
-		Status[tn] = 0;
-		StatusMaximum[tn] = input.Length - startPos;
-		Current[tn] += ProgressBarStep;
-		Parallel.For(startPos, input.Length, i =>
-		{
-			if (lz && i >= startPos + lzPos && result[i][0].Lower + result[i][0].Length == result[i][0].Base)
-				result[i] = new(result[i]) { [0] = lzInterval };
-			else
-				result[i] = new(result[i]) { [0] = i >= startPos + lzPos ? frequencyIntervals[indexCodes[i - startPos]] : new(frequencyIntervals[indexCodes[i - startPos]]) { Base = arithmeticMap[^1] } };
-			Status[tn]++;
-		});
-		indexCodes.Dispose();
-		arithmeticMap.Dispose();
-		frequencyIntervals.Dispose();
+		ProcessArithmeticMaps();
 		Status[tn]++;
 		NList<Interval> c = [];
 		c.WriteCount((uint)maxFrequency - 1);
@@ -172,215 +129,76 @@ public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> re
 		cSplit.Dispose();
 		return result;
 	}
-}
 
-public class RLE(NList<byte> input, int tn)
-{
-	public NList<byte> Encode()
-	{
-		NList<byte> result = [];
-		if (input.Length < 1)
-			return input;
-		InitProgressBars(tn);
-		for (var i = 0; i < input.Length;)
-		{
-			result.Add(input[Status[tn] = i++]);
-			if (i == input.Length)
-				break;
-			var j = i;
-			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] == input[i - 1])
-				Status[tn] = i++;
-			if (i != j)
-			{
-				result.AddRange(RepeatSerieMarker(i - j));
-				continue;
-			}
-			j = i;
-			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] != input[i - 1])
-				Status[tn] = i++;
-			i--;
-			result.AddRange(NoRepeatSerieMarker(i - j)).AddRange(input.GetSlice(j..i));
-		}
-#if DEBUG
-		var decoded = new RLEDec(result).Decode();
-		for (var i = 0; i < input.Length && i < decoded.Length; i++)
-		{
-			var x = input[i];
-			var y = decoded[i];
-			if (!x.Equals(y))
-				throw new DecoderFallbackException();
-		}
-		if (input.Length != decoded.Length)
-			throw new DecoderFallbackException();
-#endif
-		return result;
-	}
-
-	public NList<byte> RLE3(bool updateStatus = true)
-	{
-		NList<byte> result = [];
-		if (input.Length < 3 || input.Length % 3 != 0)
-			return input;
-		var length = input.Length / 3;
-		if (updateStatus)
-		{
-			Current[tn] = 0;
-			CurrentMaximum[tn] = 0;
-			Status[tn] = 0;
-			StatusMaximum[tn] = length;
-		}
-		for (var i = 0; i < length;)
-		{
-			result.AddRange(input.GetSlice(i++ * 3, 3));
-			if (updateStatus)
-				Status[tn]++;
-			if (i == length)
-				break;
-			var j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) == 3)
-			{
-				i++;
-				if (updateStatus)
-					Status[tn]++;
-			}
-			if (i != j)
-			{
-				result.AddRange(RepeatSerieMarker(i - j));
-				continue;
-			}
-			j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * 3, input, (i - 1) * 3, 3) != 3)
-			{
-				i++;
-				if (updateStatus)
-					Status[tn]++;
-			}
-			i--;
-			result.AddRange(NoRepeatSerieMarker(i - j)).AddRange(input.GetSlice((j * 3)..(i * 3)));
-		}
-#if DEBUG
-		var decoded = new RLEDec(result).DecodeRLE3();
-		for (var i = 0; i < input.Length && i < decoded.Length; i++)
-		{
-			var x = input[i];
-			var y = decoded[i];
-			if (!x.Equals(y))
-				throw new DecoderFallbackException();
-		}
-		if (input.Length != decoded.Length)
-			throw new DecoderFallbackException();
-#endif
-		return result;
-	}
-
-	public NList<byte> RLEMixed()
-	{
-		NList<byte> result = [];
-		if (input.Length < 1)
-			return input;
-		InitProgressBars(tn);
-		for (var i = 0; i < input.Length;)
-		{
-			result.Add(input[Status[tn] = i++]);
-			if (i == input.Length)
-				break;
-			var j = i;
-			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] == input[i - 1])
-				Status[tn] = i++;
-			if (i >= j + 2)
-			{
-				result.AddRange(i - j < ValuesInByte >> 2 ? [(byte)(i - j - 1)] : [((ValuesInByte >> 2) - 1), (byte)((i - j - (ValuesInByte >> 2)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 2)))]);
-				continue;
-			}
-			i = j;
-			while (i < input.Length - 4 && i - j < ValuesIn2Bytes * 3 && input.Compare(i + 2, input, i - 1, 3) == 3)
-				Status[tn] = (i += 3) - 1;
-			if (i != j)
-			{
-				result.AddRange((i - j) / 3 < ValuesInByte >> 2 ? [(byte)((i - j) / 3 - 1 + (ValuesInByte >> 2))] : [((ValuesInByte >> 1) - 1), (byte)(((i - j) / 3 - (ValuesInByte >> 2)) >> BitsPerByte), unchecked((byte)((i - j) / 3 - (ValuesInByte >> 2)))]);
-				result.Add(input[i++]).Add(input[i++]);
-				continue;
-			}
-			i = j;
-			while (i < input.Length && i - j < ValuesIn2Bytes && (input[i] != input[i - 1] || i < input.Length - 1 && input[i] != input[i + 1]) && (i == j || i >= input.Length - 5 || input.Compare(i + 3, input, i, 3) != 3))
-				Status[tn] = i++;
-			i--;
-			result.AddRange(NoRepeatSerieMarker(i - j)).AddRange(input.GetSlice(j..i));
-		}
-#if DEBUG
-		var decoded = new RLEDec(result).DecodeMixed();
-		for (var i = 0; i < input.Length && i < decoded.Length; i++)
-		{
-			var x = input[i];
-			var y = decoded[i];
-			if (!x.Equals(y))
-				throw new DecoderFallbackException();
-		}
-		if (input.Length != decoded.Length)
-			throw new DecoderFallbackException();
-#endif
-		return result;
-	}
-
-	public NList<byte> RLEN(int n)
-	{
-		if (input.Length < n || input.Length % n != 0)
-			return input;
-		NList<byte> result = [];
-		var length = input.Length / n;
-		Current[tn] = 0;
-		CurrentMaximum[tn] = 0;
-		Status[tn] = 0;
-		StatusMaximum[tn] = length;
-		for (var i = 0; i < length;)
-		{
-			result.AddRange(input.GetSlice(i++ * n, n));
-			if (i == length)
-				break;
-			var j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * n, input, (i - 1) * n, n) == n)
-				i++;
-			if (i != j)
-			{
-				result.AddRange(RepeatSerieMarker(i - j));
-				continue;
-			}
-			j = i;
-			while (i < length && i - j < ValuesIn2Bytes && input.Compare(i * n, input, (i - 1) * n, n) != n)
-				i++;
-			i--;
-			result.AddRange(NoRepeatSerieMarker(i - j)).AddRange(input.GetSlice((j * n)..(i * n)));
-		}
-		return result;
-	}
-
-	private void InitProgressBars(int tn)
+	private void Prerequisites()
 	{
 		Current[tn] = 0;
-		CurrentMaximum[tn] = 0;
+		CurrentMaximum[tn] = ProgressBarStep * 2;
+		result.Replace(input);
+		result[0] = new(result[0]);
+		lz = (lzIndex = input[0].IndexOf(LempelZivApplied)) != -1 && (bwtIndex == -1 || lzIndex != bwtIndex + 1);
+		lzDummyIndex = input[0].IndexOf(LempelZivDummyApplied);
+		lzDummy = lzDummyIndex != -1 && (bwtIndex == -1 || lzDummyIndex != bwtIndex + 1);
+		bwtLength = bwtIndex != -1 ? (int)input[0][bwtIndex + 1].Base : 0;
+		if (!lz && !lzDummy)
+			lzHeaderLength = 1;
+		else if (input[0].Length >= lzIndex + 2 && input[0][lzIndex + 1] == LempelZivSubdivided)
+			lzHeaderLength = 3;
+		else
+			lzHeaderLength = 2;
+		startPos = lzHeaderLength + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : 0) + bwtLength;
+		lzPos = bwtIndex != -1 ? 4 : 2;
+	}
+
+	private void ProcessGroups(NList<ShortIntervalList> input, int tn)
+	{
+		using var indexedInput = input.GetRange(startPos).ToNList((x, index) => (elem: x[0], index));
+		if (lz)
+			indexedInput.FilterInPlace(x => x.index < 2 || x.elem.Lower + x.elem.Length != x.elem.Base);
+		using var groups = indexedInput.Group(x => x.elem.Lower);
+		maxFrequency = groups.Max(x => x.Length);
+		consequentElems = maxFrequency > input[startPos][0].Base * 2 || input[startPos][0].Base <= ValuesInByte + 1;
+		if (consequentElems)
+			groups.NSort(x => 4294967295 - (uint)x.Length);
+		Status[tn]++;
+		uniqueList = groups.PNConvert(x => new Interval(x[0].elem) { Base = input[startPos][0].Base });
+		Status[tn]++;
+		indexCodes = RedStarLinq.NEmptyList<int>(input.Length - startPos);
+		for (var i = 0; i < groups.Length; i++)
+			foreach (var (_, index) in groups[i])
+				indexCodes[index] = i;
+		Status[tn]++;
+		frequencyTable = groups.PNConvert((x, index) => (index, x.Length));
+		Status[tn]++;
+	}
+
+	private void ProcessArithmeticMaps()
+	{
+		var intervalsBase = (uint)frequency.Sum();
+		using var arithmeticMap = GetArithmeticMap(frequency);
+		Status[tn]++;
+		if (lz)
+			intervalsBase = GetBaseWithBuffer(arithmeticMap[^1], spaces);
+		using var frequencyIntervals = arithmeticMap.Prepend(0u).GetROLSlice(0, arithmeticMap.Length).ToNList((x, index) => new Interval(x, (uint)frequency[index], intervalsBase));
+		Status[tn]++;
+		Interval lzInterval = lz ? new(arithmeticMap[^1], intervalsBase - arithmeticMap[^1], intervalsBase) : new();
 		Status[tn] = 0;
-		StatusMaximum[tn] = input.Length;
+		StatusMaximum[tn] = input.Length - startPos;
+		Current[tn] += ProgressBarStep;
+		Parallel.For(startPos, input.Length, i =>
+		{
+			if (lz && i >= startPos + lzPos && result[i][0].Lower + result[i][0].Length == result[i][0].Base)
+				result[i] = new(result[i]) { [0] = lzInterval };
+			else
+				result[i] = new(result[i]) { [0] = i >= startPos + lzPos ? frequencyIntervals[indexCodes[i - startPos]] : new(frequencyIntervals[indexCodes[i - startPos]]) { Base = arithmeticMap[^1] } };
+			Status[tn]++;
+		});
+		indexCodes.Dispose();
 	}
 
-	private static NList<byte> RepeatSerieMarker(int len)
+	private static NList<uint> GetArithmeticMap(NList<int> frequency)
 	{
-		if (len < ValuesInByte >> 1)
-			return [(byte)(len - 1)];
-		else
-		{
-			var len2 = len - (ValuesInByte >> 1);
-			return [((ValuesInByte >> 1) - 1), (byte)(len2 >> BitsPerByte), unchecked((byte)len2)];
-		}
-	}
-
-	private static NList<byte> NoRepeatSerieMarker(int len)
-	{
-		if (len + 1 < ValuesInByte >> 1)
-			return [(byte)(len + (ValuesInByte >> 1))];
-		else
-		{
-			var len2 = len + 1 - (ValuesInByte >> 1);
-			return [(ValuesInByte - 1), (byte)(len2 >> BitsPerByte), unchecked((byte)len2)];
-		}
+		uint a = 0;
+		return frequency.ToNList(x => a += (uint)x);
 	}
 }
