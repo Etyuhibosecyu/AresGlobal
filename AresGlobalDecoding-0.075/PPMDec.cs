@@ -7,6 +7,7 @@ public class PPMDec : IDisposable
 	protected uint inputBase, dicsize;
 	protected int blockIndex;
 	protected uint counter, nextWordLink;
+	protected int tn;
 	protected NList<ShortIntervalList> result = default!;
 	protected NList<uint> context = default!;
 	protected NList<uint> context2 = default!;
@@ -23,12 +24,13 @@ public class PPMDec : IDisposable
 
 	protected PPMDec() { }
 
-	public PPMDec(GlobalDecoding decoding, ArithmeticDecoder ar, uint inputBase, int blockIndex)
+	public PPMDec(GlobalDecoding decoding, ArithmeticDecoder ar, uint inputBase, int blockIndex, int tn)
 	{
 		this.decoding = decoding;
 		this.ar = ar;
 		this.inputBase = inputBase;
 		this.blockIndex = blockIndex;
+		this.tn = tn;
 		Initialize();
 	}
 
@@ -55,8 +57,8 @@ public class PPMDec : IDisposable
 		dicsize = ar.ReadCount();
 		if (counter > GetFragmentLength() || dicsize > GetFragmentLength())
 			throw new DecoderFallbackException();
-		Status[0] = 0;
-		StatusMaximum[0] = (int)counter;
+		Status[tn] = 0;
+		StatusMaximum[tn] = (int)counter;
 		result = [];
 		context = new(maxDepth);
 		context2 = new(maxDepth);
@@ -76,7 +78,7 @@ public class PPMDec : IDisposable
 
 	public virtual NList<ShortIntervalList> Decode()
 	{
-		for (; (int)counter > 0; counter--, Status[0]++)
+		for (; (int)counter > 0; counter--, Status[tn]++)
 		{
 			result.GetSlice(Max(result.Length - maxDepth, 0)..).ForEach((x, index) => context.SetOrAdd(index, x[0].Lower));
 			context.Reverse();
@@ -149,7 +151,7 @@ public class PPMDec : IDisposable
 		preLZMap[1]++;
 		var decrease = length + maxDepth - 2;
 		counter -= (uint)decrease;
-		Status[0] += (int)decrease;
+		Status[tn] += (int)decrease;
 	}
 
 	protected virtual int ProcessLZDist()

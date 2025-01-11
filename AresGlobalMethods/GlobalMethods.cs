@@ -685,6 +685,18 @@ public class RLE(NList<byte> input, int tn)
 			i--;
 			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice(j..i));
 		}
+#if DEBUG
+		var decoded = new RLEDec(result).Decode();
+		for (var i = 0; i < input.Length && i < decoded.Length; i++)
+		{
+			var x = input[i];
+			var y = decoded[i];
+			if (!x.Equals(y))
+				throw new DecoderFallbackException();
+		}
+		if (input.Length != decoded.Length)
+			throw new DecoderFallbackException();
+#endif
 		return result;
 	}
 
@@ -730,6 +742,70 @@ public class RLE(NList<byte> input, int tn)
 			i--;
 			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice((j * 3)..(i * 3)));
 		}
+#if DEBUG
+		var decoded = new RLEDec(result).DecodeRLE3();
+		for (var i = 0; i < input.Length && i < decoded.Length; i++)
+		{
+			var x = input[i];
+			var y = decoded[i];
+			if (!x.Equals(y))
+				throw new DecoderFallbackException();
+		}
+		if (input.Length != decoded.Length)
+			throw new DecoderFallbackException();
+#endif
+		return result;
+	}
+
+	public NList<byte> RLEMixed()
+	{
+		NList<byte> result = [];
+		if (input.Length < 1)
+			return input;
+		Current[tn] = 0;
+		CurrentMaximum[tn] = 0;
+		Status[tn] = 0;
+		StatusMaximum[tn] = input.Length;
+		for (var i = 0; i < input.Length;)
+		{
+			result.Add(input[Status[tn] = i++]);
+			if (i == input.Length)
+				break;
+			var j = i;
+			while (i < input.Length && i - j < ValuesIn2Bytes && input[i] == input[i - 1])
+				Status[tn] = i++;
+			if (i >= j + 2)
+			{
+				result.AddRange(i - j < ValuesInByte >> 2 ? [(byte)(i - j - 1)] : [((ValuesInByte >> 2) - 1), (byte)((i - j - (ValuesInByte >> 2)) >> BitsPerByte), unchecked((byte)(i - j - (ValuesInByte >> 2)))]);
+				continue;
+			}
+			i = j;
+			while (i < input.Length - 4 && i - j < ValuesIn2Bytes * 3 && input.Compare(i + 2, input, i - 1, 3) == 3)
+				Status[tn] = (i += 3) - 1;
+			if (i != j)
+			{
+				result.AddRange((i - j) / 3 < ValuesInByte >> 2 ? [(byte)((i - j) / 3 - 1 + (ValuesInByte >> 2))] : [((ValuesInByte >> 1) - 1), (byte)(((i - j) / 3 - (ValuesInByte >> 2)) >> BitsPerByte), unchecked((byte)((i - j) / 3 - (ValuesInByte >> 2)))]);
+				result.Add(input[i++]).Add(input[i++]);
+				continue;
+			}
+			i = j;
+			while (i < input.Length && i - j < ValuesIn2Bytes && (input[i] != input[i - 1] || i < input.Length - 1 && input[i] != input[i + 1]) && (i == j || i >= input.Length - 5 || input.Compare(i + 3, input, i, 3) != 3))
+				Status[tn] = i++;
+			i--;
+			result.AddRange(i - j + 1 < ValuesInByte >> 1 ? [(byte)(i - j + (ValuesInByte >> 1))] : [(ValuesInByte - 1), (byte)((i - j + 1 - (ValuesInByte >> 1)) >> BitsPerByte), unchecked((byte)(i - j + 1 - (ValuesInByte >> 1)))]).AddRange(input.GetSlice(j..i));
+		}
+#if DEBUG
+		var decoded = new RLEDec(result).DecodeMixed();
+		for (var i = 0; i < input.Length && i < decoded.Length; i++)
+		{
+			var x = input[i];
+			var y = decoded[i];
+			if (!x.Equals(y))
+				throw new DecoderFallbackException();
+		}
+		if (input.Length != decoded.Length)
+			throw new DecoderFallbackException();
+#endif
 		return result;
 	}
 

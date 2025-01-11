@@ -73,7 +73,7 @@ public class AdaptiveHuffmanDec : IDisposable
 		set = [(uint.MaxValue, 1)];
 	}
 
-	private void DecodeSkipped()
+	protected virtual void DecodeSkipped()
 	{
 		var skippedCount = (int)ar.ReadCount();
 		var @base = skippedCount == 0 ? 1 : ar.ReadCount();
@@ -101,17 +101,17 @@ public class AdaptiveHuffmanDec : IDisposable
 
 	protected virtual void DecodeIteration()
 	{
-		var readIndex = ReadFirst();
-		if (!(lz != 0 && uniqueList[readIndex].Lower == fileBase - 1))
+		var readItem = ReadFirst();
+		if (!(lz != 0 && uniqueList[readItem].Lower == fileBase - 1))
 		{
-			result.Add(bwt == 0 && blockIndex == 2 ? new() { uniqueList[readIndex], new(ar.ReadEqual(2), 2) } : bwt != 0 && blockIndex != 0 && result.Length < bwtBlockExtraSize ? [new((uint)readIndex, ValuesInByte)] : new() { uniqueList[readIndex] });
+			result.Add(bwt == 0 && blockIndex == 2 ? new() { uniqueList[readItem], new(ar.ReadEqual(2), 2) } : bwt != 0 && blockIndex != 0 && result.Length < bwtBlockExtraSize ? [new((uint)readItem, ValuesInByte)] : new() { uniqueList[readItem] });
 			lzLength++;
 			if (lz != 0 && distsSL.Length < firstIntervalDist)
 				distsSL.Insert(distsSL.Length - ((int)lzData.UseSpiralLengths + 1), 1);
 			return;
 		}
-		decoding.ProcessLZLength(lzData, lengthsSL, out readIndex, out var length);
-		decoding.ProcessLZDist(lzData, distsSL, result.Length, out readIndex, out var dist, length, out var maxDist);
+		decoding.ProcessLZLength(lzData, lengthsSL, out readItem, out var length);
+		decoding.ProcessLZDist(lzData, distsSL, result.Length, out readItem, out var dist, length, out var maxDist);
 		decoding.ProcessLZSpiralLength(lzData, ref dist, out var spiralLength, maxDist);
 		var start = (int)(result.Length - dist - length - 2);
 		if (start < 0)
@@ -127,16 +127,16 @@ public class AdaptiveHuffmanDec : IDisposable
 	{
 		if (bwt != 0 && blockIndex != 0 && result.Length < bwtBlockExtraSize)
 			return (int)ar.ReadEqual(ValuesInByte);
-		var readIndex = ar.ReadPart(set);
-		if (readIndex == set.Length - 1)
-			readIndex = ReadNewItem();
+		var readItem = ar.ReadPart(set);
+		if (readItem == set.Length - 1)
+			readItem = ReadNewItem();
 		else
-			set.Increase(uniqueList[readIndex].Lower);
+			set.Increase(uniqueList[readItem].Lower);
 		FirstUpdateSet();
-		return readIndex;
+		return readItem;
 	}
 
-	private int ReadNewItem()
+	protected virtual int ReadNewItem()
 	{
 		uint actualIndex;
 		if (bwt != 0 && blockIndex == 2)

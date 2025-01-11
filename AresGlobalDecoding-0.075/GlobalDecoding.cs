@@ -118,5 +118,5 @@ public class GlobalDecoding(ArithmeticDecoder ar)
 		}
 	}
 
-	public virtual PPMDec CreatePPM(uint @base, int blockIndex = -1) => new(this, ar, @base, blockIndex);
+	public virtual PPMDec CreatePPM(uint @base, int blockIndex = -1, int tn = 0) => new(this, ar, @base, blockIndex, tn);
 }

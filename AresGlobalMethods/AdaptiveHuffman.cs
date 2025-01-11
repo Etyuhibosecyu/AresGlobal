@@ -25,7 +25,7 @@ public record class AdaptiveHuffman(int TN)
 		if (input.GetSlice(..WordsListActualParts).Any(x => x.Length < 2))
 			throw new EncoderFallbackException();
 		using ArithmeticEncoder ar = new();
-		for (var i = 0; i < WordsListActualParts; i++, _ = i < WordsListActualParts ? Subtotal[TN] += ProgressBarStep : 0)
+		for (var i = 0; i < WordsListActualParts; i++, _ = i < WordsListActualParts ? Methods[TN] += ProgressBarStep : 0)
 			if (!EncodeDoubleList(ar, input[i], lzData[i], i))
 				throw new EncoderFallbackException();
 		input.GetSlice(WordsListActualParts).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar.WritePart(x))));

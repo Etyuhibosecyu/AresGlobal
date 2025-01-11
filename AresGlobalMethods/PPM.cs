@@ -1,57 +1,81 @@
 ﻿
 namespace AresGlobalMethods;
 
-public record class PPM(int TN) : IDisposable
+public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposable
 {
-	private ArithmeticEncoder ar = default!;
+	private ArithmeticEncoder[] ar = default!;
 	private readonly List<NList<Interval>> outputIntervals = [];
-	private int doubleListsCompleted = 0;
+	private int doubleListsCompleted = 0, BlocksCount = 0;
 	private readonly object lockObj = new();
 
 	public virtual void Dispose()
 	{
-		ar.Dispose();
-		outputIntervals.Dispose();
+		ar?.ForEach(x => x?.Dispose());
+		outputIntervals?.Dispose();
 		GC.SuppressFinalize(this);
 	}
 
-	public NList<byte> Encode(NList<ShortIntervalList> input)
+	public NList<byte> Encode(bool split = false)
 	{
-		if (input.Length < 4)
+		if (!(Input.Length >= 3 && Input.GetSlice(..3).All(x => x.Length >= 4) || split))
 			throw new EncoderFallbackException();
-		ar = new();
-		outputIntervals.Replace(new List<NList<Interval>>(new NList<Interval>()));
-		if (!new Encoder(input, outputIntervals[0], 1, true, TN).Encode())
-			throw new EncoderFallbackException();
-		outputIntervals[0].ForEach(x => ar.WritePart(x));
-		ar.WriteEqual(1234567890, 4294967295);
-		return ar;
-	}
-
-	public NList<byte> Encode(List<NList<ShortIntervalList>> input, bool split = false)
-	{
-		if (!(input.Length >= 3 && input.GetSlice(..3).All(x => x.Length >= 4) || split))
-			throw new EncoderFallbackException();
-		var BlocksCount = split ? input.Length : WordsListActualParts;
+		BlocksCount = split ? Input.Length : WordsListActualParts;
 		Current[TN] = 0;
 		CurrentMaximum[TN] = ProgressBarStep * (BlocksCount - 1);
-		ar = new();
+		ar = RedStarLinq.FillArray(split ? Input.Length : 1, _ => new ArithmeticEncoder());
 		outputIntervals.Replace(RedStarLinq.FillArray(BlocksCount, _ => new NList<Interval>()));
+		if (!split)
+			Parallel.For(0, BlocksCount, i => EncodeBlock(i, i, i == WordsListActualParts - 1, TN));
+		else if (Threads.Count(x => x != null && x.ThreadState is System.Threading.ThreadState.Running
+			or System.Threading.ThreadState.Background) == 1 && BlocksCount <= ProgressBarGroups)
+			Parallel.For(0, BlocksCount, i => EncodeBlock(i, 1, true, i));
+		else
+			for (var i = 0; i < BlocksCount; i++)
+				EncodeBlock(i, 1, true, TN);
+		return split ? ToBytesSplit() : ToBytesNoSplit();
+	}
+
+	private void EncodeBlock(int i, int BlockIndex, bool LastBlock, int TN)
+	{
+		if (!new Encoder(Input[i], outputIntervals[i], BlockIndex, LastBlock, TN).Encode())
+			throw new EncoderFallbackException();
+		lock (lockObj)
+		{
+			doubleListsCompleted++;
+			if (doubleListsCompleted != BlocksCount)
+				Current[TN] += ProgressBarStep;
+		}
+	}
+
+	private NList<byte> ToBytesSplit()
+	{
 		Parallel.For(0, BlocksCount, i =>
 		{
-			if (!new Encoder(input[i], outputIntervals[i], split ? 1 : i, i == WordsListActualParts - 1 || split, TN).Encode())
-				throw new EncoderFallbackException();
-			lock (lockObj)
-			{
-				doubleListsCompleted++;
-				if (doubleListsCompleted != BlocksCount)
-					Current[TN] += ProgressBarStep;
-			}
+			outputIntervals[i].ForEach(x => ar[i].WritePart(x));
+			ar[i].WriteEqual(1234567890, 4294967295);
 		});
-		outputIntervals.ForEach(l => l.ForEach(x => ar.WritePart(x)));
-		input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar.WritePart(x))));
-		ar.WriteEqual(1234567890, 4294967295);
-		return ar;
+		NList<byte> result = [(byte)(BlocksCount - 1)];
+		for (var i = 0; i < BlocksCount; i++)
+		{
+			NList<byte> bytes = ar[i];
+			if (i != BlocksCount - 1)
+			{
+				result.Add((byte)(bytes.Length >> (BitsPerByte << 1)));
+				result.Add(unchecked((byte)(bytes.Length >> BitsPerByte)));
+				result.Add(unchecked((byte)bytes.Length));
+			}
+			result.AddRange(bytes);
+			bytes.Dispose();
+		}
+		return result;
+	}
+
+	private NList<byte> ToBytesNoSplit()
+	{
+		outputIntervals.ForEach(l => l.ForEach(x => ar[0].WritePart(x)));
+		Input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar[0].WritePart(x))));
+		ar[0].WriteEqual(1234567890, 4294967295);
+		return ar[0];
 	}
 }
 

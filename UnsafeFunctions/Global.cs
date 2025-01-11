@@ -21,12 +21,14 @@ public static unsafe class Global
 	public const int ProgressBarStep = 10;
 	public const int ProgressBarHGroups = 3, ProgressBarVGroups = 3, ProgressBarGroups = ProgressBarHGroups * ProgressBarVGroups;
 	public static Thread[] Threads { get; set; } = new Thread[ProgressBarGroups];
-	public static int Supertotal { get; set; }
-	public static int SupertotalMaximum { get; set; }
-	public static int Total { get; set; }
-	public static int TotalMaximum { get; set; }
-	public static int[] Subtotal { get; set; } = new int[ProgressBarGroups];
-	public static int[] SubtotalMaximum { get; set; } = new int[ProgressBarGroups];
+	public static int Files { get; set; }
+	public static int FilesMaximum { get; set; }
+	public static int Fragments { get; set; }
+	public static int FragmentsMaximum { get; set; }
+	public static int Branches { get; set; }
+	public static int BranchesMaximum { get; set; }
+	public static int[] Methods { get; set; } = new int[ProgressBarGroups];
+	public static int[] MethodsMaximum { get; set; } = new int[ProgressBarGroups];
 	public static int[] Current { get; set; } = new int[ProgressBarGroups];
 	public static int[] CurrentMaximum { get; set; } = new int[ProgressBarGroups];
 	public static int[] Status { get; set; } = new int[ProgressBarGroups];

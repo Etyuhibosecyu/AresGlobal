@@ -8,9 +8,6 @@
 
 	<ItemGroup>
 	  <PackageReference Include="ILGPU" Version="1.5.1" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<ProjectReference Include="..\..\Corlib.NStar\Corlib.NStar\Corlib.NStar.csproj" />
 	</ItemGroup>
 
