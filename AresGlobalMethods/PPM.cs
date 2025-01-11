@@ -79,7 +79,8 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 	}
 }
 
-file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result, int BlockIndex, bool LastBlock, int TN) : IDisposable
+file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result, int BlockIndex, bool LastBlock, int TN)
+	: IDisposable
 {
 	private const int LZDictionarySize = 8388607;
 	private int startPos = 1;
@@ -237,7 +238,8 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 	{
 		if (i < lzBlockEnd)
 			return;
-		if (currentContext.Length != maxContextDepth || i < (maxContextDepth << 1) + startPos || !TryProcessLZ(currentContext, i) || i >= lzBlockEnd)
+		if (currentContext.Length != maxContextDepth || i < (maxContextDepth << 1) + startPos
+			|| !TryProcessLZ(currentContext, i) || i >= lzBlockEnd)
 		{
 			freqTable.Clear();
 			excludingFreqTable.Clear();
@@ -280,7 +282,12 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 		if (freqTable.Length == 0 || currentContext.Length == 0)
 		{
 			foreach (var (Key, _) in excludingFreqTable)
-				excludingFreqTable.Update(Key, globalFreqTable.TryGetValue(Key, out var newValue) ? newValue : throw new EncoderFallbackException());
+			{
+				if (globalFreqTable.TryGetValue(Key, out var newValue))
+					excludingFreqTable.Update(Key, newValue);
+				else
+					throw new EncoderFallbackException();
+			}
 			outputFreqTable = globalFreqTable.ExceptWith(excludingFreqTable);
 		}
 		else
@@ -307,7 +314,12 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 	private void ProcessNewItem()
 	{
 		if (outputFreqTable.Length != 0)
-			intervalsForBuffer.Add(new((uint)outputFreqTable.ValuesSum, (uint)outputFreqTable.Length * 100, GetFreqTableBase(outputFreqTable)));
+		{
+			var valuesSum = (uint)outputFreqTable.ValuesSum;
+			var length = (uint)outputFreqTable.Length;
+			Interval header = new(valuesSum, length * 100, GetFreqTableBase(outputFreqTable));
+			intervalsForBuffer.Add(header);
+		}
 		if (BlockIndex != 2)
 		{
 			intervalsForBuffer.Add(new((uint)newItemsFreqTable.IndexOf(item), (uint)newItemsFreqTable.Length));
@@ -323,7 +335,20 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 		{
 			isSpace = Input[i][1].Lower != 0;
 			uint bufferSpaces = (uint)spaceBuffer.Count(true), bufferNotSpaces = (uint)spaceBuffer.Count(false);
-			intervalsForBuffer.Add(new(isSpace ? notSpaceCount + bufferNotSpaces : 0, isSpace ? spaceCount + bufferSpaces : notSpaceCount + bufferNotSpaces, notSpaceCount + spaceCount + (uint)spaceBuffer.Length));
+			Interval spaceInterval;
+			uint spaceLower, spaceFrequency;
+			if (isSpace)
+			{
+				spaceLower = notSpaceCount + bufferNotSpaces;
+				spaceFrequency = spaceCount + bufferSpaces;
+			}
+			else
+			{
+				spaceLower = 0;
+				spaceFrequency = notSpaceCount + bufferNotSpaces;
+			}
+			spaceInterval = new(spaceLower, spaceFrequency, notSpaceCount + spaceCount + (uint)spaceBuffer.Length);
+			intervalsForBuffer.Add(spaceInterval);
 		}
 		else
 			for (var j = 1; j < Input[i].Length; j++)
@@ -374,11 +399,17 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 	private void ValidateLZBetterValue(int curPos, ref LZEntry bestValue, int pos)
 	{
 		var dist = (pos - (curPos - startPos - maxContextDepth)) % LZDictionarySize + curPos - startPos - maxContextDepth;
-		int length;
-		for (length = -maxContextDepth; length < Input.Length - startPos - curPos && RedStarLinq.Equals(Input[curPos + length], Input[dist + maxContextDepth + startPos + length], (x, y) => x.Lower == y.Lower); length++)
-			;
+		var length = -maxContextDepth;
+		while (length < Input.Length - startPos - curPos && AreItemsEqual())
+			length++;
 		if (curPos - (dist + maxContextDepth + startPos) >= 2 && length > bestValue.Length)
 			bestValue = new(pos, length);
+		bool AreItemsEqual()
+		{
+			var current = Input[curPos + length];
+			var target = Input[dist + maxContextDepth + startPos + length];
+			return RedStarLinq.Equals(current, target, (x, y) => x.Lower == y.Lower);
+		}
 	}
 
 	private void WriteNotLZCount()
@@ -400,7 +431,8 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 		}
 		else
 		{
-			Result.Add(new((uint)lzPositions.GetLeftValuesSum(uint.MaxValue, out var escapeFrequency), (uint)escapeFrequency, (uint)lzPositions.ValuesSum));
+			var lower = (uint)lzPositions.GetLeftValuesSum(uint.MaxValue, out var escapeFrequency);
+			Result.Add(new(lower, (uint)escapeFrequency, (uint)lzPositions.ValuesSum));
 			lzPositions.Update(uint.MaxValue, escapeFrequency + 100);
 			Result.Add(new((uint)bestPos, (uint)Min(curPos - startPos - maxContextDepth, LZDictionarySize - 1)));
 			lzPositions.Add((uint)bestPos, 100);
@@ -411,7 +443,8 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 	{
 		if (bestLength < lzLengths.Length - 1)
 		{
-			Result.Add(new((uint)lzLengths.GetLeftValuesSum(bestLength, out var frequency), (uint)frequency, (uint)lzLengths.ValuesSum));
+			var lower = (uint)lzLengths.GetLeftValuesSum(bestLength, out var frequency);
+			Result.Add(new(lower, (uint)frequency, (uint)lzLengths.ValuesSum));
 			lzLengths.Increase(bestLength);
 		}
 		else
@@ -459,22 +492,31 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 
 	private void IncreaseInEncoded(int successLength)
 	{
-		for (; reservedContext.Length > 0 && contextSet.TryGetIndexOf(reservedContext, out var index); reservedContext.RemoveAt(^1), _ = reservedContext.Length == 0 ? null : currentContext.RemoveAt(^1))
+		for (; reservedContext.Length > 0 && contextSet.TryGetIndexOf(reservedContext, out var index); )
 		{
 			if (lzBufferIndex == -1)
 				lzBufferIndex = index;
-			if (!contextFreqTableByLevel[index].TryGetValue(item, out var itemValue))
-			{
-				contextFreqTableByLevel[index].Add(item, 100);
-				continue;
-			}
-			else if (reservedContext.Length == 1 || itemValue > 100)
-			{
-				contextFreqTableByLevel[index].Update(item, itemValue + (int)Max(Round((double)100 / (successLength - reservedContext.Length + 1)), 1));
-				continue;
-			}
-			ComplexIncreaseInEncoded(index, itemValue);
+			IncreaseInEncodedMain(successLength, index);
+			reservedContext.RemoveAt(^1);
+			if (reservedContext.Length != 0)
+				currentContext.RemoveAt(^1);
 		}
+	}
+
+	private void IncreaseInEncodedMain(int successLength, int index)
+	{
+		if (!contextFreqTableByLevel[index].TryGetValue(item, out var itemValue))
+		{
+			contextFreqTableByLevel[index].Add(item, 100);
+			return;
+		}
+		else if (reservedContext.Length == 1 || itemValue > 100)
+		{
+			var newItemValue = itemValue + (int)Max(Round((double)100 / (successLength - reservedContext.Length + 1)), 1);
+			contextFreqTableByLevel[index].Update(item, newItemValue);
+			return;
+		}
+		ComplexIncreaseInEncoded(index, itemValue);
 	}
 
 	private void ComplexIncreaseInEncoded(int index, int itemValue)
