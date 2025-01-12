@@ -152,9 +152,9 @@ public class ArithmeticDecoder : IDisposable
 		uint ol = l, oh = h, divisor = quickMap[^1];
 		if (divisor == 0)
 			return 0;
-		int c;
+		var c = 0;
 		var freq = (uint)((((ulong)value - ol + 1) * divisor - 1) / ((ulong)oh - ol + 1));
-		for (c = 0; quickMap[c] <= freq; c++) ;
+		while (quickMap[c] <= freq) c++;
 		l = (uint)(ol + ((c == 0) ? 0 : quickMap[c - 1]) * ((ulong)oh - ol + 1) / divisor);
 		h = (uint)(ol + quickMap[c] * ((ulong)oh - ol + 1) / divisor - 1);
 		ReadInternal();

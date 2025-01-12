@@ -1,6 +1,13 @@
 ﻿
 namespace AresGlobalMethods;
 
+/// <summary>
+/// Класс, выполняющий сжатие методом PPM (Prediction by partial matching - предсказание по частичному совпадению).
+/// Использование: new PPM(input, tn).Encode(split);
+/// split равен false, если это PPM для слов, и true в остальных случаях.
+/// </summary>
+/// <param name="Input">Входной поток для сжатия.</param>
+/// <param name="TN">Номер потока.</param>
 public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposable
 {
 	private ArithmeticEncoder[] ar = default!;
