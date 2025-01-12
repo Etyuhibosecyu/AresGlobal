@@ -3,8 +3,8 @@ namespace AresGlobalMethods;
 
 /// <summary>
 /// Класс, выполняющий сжатие методом PPM (Prediction by partial matching - предсказание по частичному совпадению).
-/// Использование: new PPM(input, tn).Encode(split);
-/// split равен false, если это PPM для слов, и true в остальных случаях.
+/// Использование: new PPM(input, tn).Encode(words);
+/// words равен true, если это PPM для слов, и false в остальных случаях.
 /// </summary>
 /// <param name="Input">Входной поток для сжатия.</param>
 /// <param name="TN">Номер потока (от 0 до 8, если несколько потоков запускаются параллельно, им нужны разные номера).</param>
@@ -26,16 +26,16 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 		GC.SuppressFinalize(this);
 	}
 
-	public NList<byte> Encode(bool split = false)
+	public NList<byte> Encode(bool words = true)
 	{
-		if (!(Input.Length >= 3 && Input.GetSlice(..3).All(x => x.Length >= 4) || split))
+		if (!(Input.Length >= 3 && Input.GetSlice(..3).All(x => x.Length >= 4) || words))
 			throw new EncoderFallbackException();
-		BlocksCount = split ? Input.Length : WordsListActualParts;
+		BlocksCount = words ? Input.Length : WordsListActualParts;
 		Current[TN] = 0;
 		CurrentMaximum[TN] = ProgressBarStep * (BlocksCount - 1);
-		ar = RedStarLinq.FillArray(split ? Input.Length : 1, _ => new ArithmeticEncoder());
+		ar = RedStarLinq.FillArray(words ? Input.Length : 1, _ => new ArithmeticEncoder());
 		outputIntervals.Replace(RedStarLinq.FillArray(BlocksCount, _ => new NList<Interval>()));
-		if (!split)
+		if (words)
 			Parallel.For(0, BlocksCount, i => EncodeBlock(i, i, i == WordsListActualParts - 1, TN));
 		else if (Threads.Count(x => x != null && x.ThreadState is System.Threading.ThreadState.Running
 			or System.Threading.ThreadState.Background) == 1 && BlocksCount <= ProgressBarGroups)
@@ -43,7 +43,7 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 		else
 			for (var i = 0; i < BlocksCount; i++)
 				EncodeBlock(i, 1, true, TN);
-		return split ? ToBytesSplit() : ToBytesNoSplit();
+		return words ? ToBytesWords() : ToBytesNoWords();
 	}
 
 	private void EncodeBlock(int LocalIndex, int BlockIndex, bool LastBlock, int TN)
@@ -58,7 +58,15 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 		}
 	}
 
-	private NList<byte> ToBytesSplit()
+	private NList<byte> ToBytesWords()
+	{
+		outputIntervals.ForEach(l => l.ForEach(x => ar[0].WritePart(x)));
+		Input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar[0].WritePart(x))));
+		ar[0].WriteEqual(1234567890, 4294967295);
+		return ar[0];
+	}
+
+	private NList<byte> ToBytesNoWords()
 	{
 		Parallel.For(0, BlocksCount, i =>
 		{
@@ -79,14 +87,6 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 			bytes.Dispose();
 		}
 		return result;
-	}
-
-	private NList<byte> ToBytesNoSplit()
-	{
-		outputIntervals.ForEach(l => l.ForEach(x => ar[0].WritePart(x)));
-		Input.GetSlice(BlocksCount).ForEach(dl => dl.ForEach(l => l.ForEach(x => ar[0].WritePart(x))));
-		ar[0].WriteEqual(1234567890, 4294967295);
-		return ar[0];
 	}
 }
 
