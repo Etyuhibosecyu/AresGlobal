@@ -8,6 +8,10 @@ namespace AresGlobalMethods;
 /// </summary>
 /// <param name="Input">Входной поток для сжатия.</param>
 /// <param name="TN">Номер потока.</param>
+/// <remarks>
+/// Как привести входной поток к виду, приемлемому для этого класса, см. в файле RootMethodsF.cs
+/// в методах PreEncode() и Encode4().
+/// </remarks>
 public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposable
 {
 	private ArithmeticEncoder[] ar = default!;
