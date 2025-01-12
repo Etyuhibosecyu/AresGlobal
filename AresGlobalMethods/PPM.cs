@@ -7,7 +7,7 @@ namespace AresGlobalMethods;
 /// split равен false, если это PPM для слов, и true в остальных случаях.
 /// </summary>
 /// <param name="Input">Входной поток для сжатия.</param>
-/// <param name="TN">Номер потока.</param>
+/// <param name="TN">Номер потока (от 0 до 8, если несколько потоков запускаются параллельно, им нужны разные номера).</param>
 /// <remarks>
 /// Как привести входной поток к виду, приемлемому для этого класса, см. в файле RootMethodsF.cs
 /// в методах PreEncode() и Encode4().
