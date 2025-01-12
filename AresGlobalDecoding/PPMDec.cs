@@ -53,8 +53,8 @@ public class PPMDec : IDisposable
 
 	protected virtual void Initialize()
 	{
-		counter = ar.ReadCount();
-		dicsize = ar.ReadCount();
+		counter = ar.ReadNumber();
+		dicsize = ar.ReadNumber();
 		if (counter > GetFragmentLength() || dicsize > GetFragmentLength())
 			throw new DecoderFallbackException();
 		Status[tn] = 0;

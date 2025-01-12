@@ -65,7 +65,7 @@ public class AdaptiveHuffmanDec : IDisposable
 	{
 		if (bwt != 0 && blockIndex != 0)
 			DecodeSkipped();
-		fileBase = ar.ReadCount();
+		fileBase = ar.ReadNumber();
 		if (counter < 0 || counter > GetFragmentLength() + (bwt == 0 ? 0 : GetFragmentLength() >> 8))
 			throw new DecoderFallbackException();
 		Status[0] = 0;
@@ -75,8 +75,8 @@ public class AdaptiveHuffmanDec : IDisposable
 
 	protected virtual void DecodeSkipped()
 	{
-		var skippedCount = (int)ar.ReadCount();
-		var @base = skippedCount == 0 ? 1 : ar.ReadCount();
+		var skippedCount = (int)ar.ReadNumber();
+		var @base = skippedCount == 0 ? 1 : ar.ReadNumber();
 		(newItems = []).AddSeries((int)@base, index => ((uint)index, 1));
 		if (skippedCount > @base || @base > (blockIndex == 2 ? GetFragmentLength() : ValuesInByte))
 			throw new DecoderFallbackException();

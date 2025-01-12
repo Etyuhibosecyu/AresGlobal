@@ -2,15 +2,16 @@
 namespace AresGlobalMethods;
 
 /// <summary>
-/// Класс, выполняющий сжатие методом PPM (Prediction by partial matching - предсказание по частичному совпадению).
-/// Использование: new PPM(input, tn).Encode(words);
-/// words равен true, если это PPM для слов, и false в остальных случаях.
+/// Класс, выполняющий сжатие методом PPM (Prediction by partial matching - предсказание по частичному совпадению, подробнее
+/// см. <a href="https://ru.wikipedia.org/wiki/Алгоритм_сжатия_PPM">здесь</a>).<br/>
+/// Использование: <tt>new PPM(input, tn).Encode(words);</tt>.<br/>
+/// <tt>words</tt> равен true, если это PPM для слов, и false в остальных случаях.
 /// </summary>
 /// <param name="Input">Входной поток для сжатия.</param>
-/// <param name="TN">Номер потока (от 0 до 8, если несколько потоков запускаются параллельно, им нужны разные номера).</param>
+/// <param name="TN">Номер потока (см. <see cref="Threads"/>).</param>
 /// <remarks>
-/// Как привести входной поток к виду, приемлемому для этого класса, см. в файле RootMethodsF.cs
-/// в методах PreEncode() и Encode4().
+/// Как привести входной поток к виду, приемлемому для этого класса, см. в проекте AresFLib в файле RootMethodsF.cs
+/// в методах PreEncode() и PPMEncode().
 /// </remarks>
 public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposable
 {
@@ -19,13 +20,18 @@ public record class PPM(List<NList<ShortIntervalList>> Input, int TN) : IDisposa
 	private int doubleListsCompleted = 0, BlocksCount = 0;
 	private readonly object lockObj = new();
 
+	/// <summary>Основной метод класса. Инструкция по применению - см. в описании класса.</summary>
 	public virtual void Dispose()
 	{
 		ar?.ForEach(x => x?.Dispose());
+		outputIntervals?.ForEach(x => x?.Dispose());
 		outputIntervals?.Dispose();
 		GC.SuppressFinalize(this);
 	}
 
+	/// <summary>
+	/// Основной метод класса. Инструкция по применению - см. в описании класса.
+	/// </summary>
 	public NList<byte> Encode(bool words = true)
 	{
 		if (!(Input.Length >= 3 && Input.GetSlice(..3).All(x => x.Length >= 4) || words))
@@ -203,13 +209,13 @@ file record class Encoder(NList<ShortIntervalList> Input, NList<Interval> Result
 		if (BlockIndex == 0)
 		{
 			Result.Add(new(Input[1][0].Lower, 1, 3));
-			Result.WriteCount(inputBase);
+			Result.WriteNumber(inputBase);
 			for (var i = 2; i < startPos; i++)
 				for (var j = 0; j < Input[i].Length; j++)
 					Result.Add(new(Input[i][j].Lower, Input[i][j].Length, Input[i][j].Base));
 		}
-		Result.WriteCount((uint)(Input.Length - startPos));
-		Result.WriteCount((uint)Min(LZDictionarySize, FragmentLength));
+		Result.WriteNumber((uint)(Input.Length - startPos));
+		Result.WriteNumber((uint)Min(LZDictionarySize, FragmentLength));
 	}
 
 	private void PrepareFields()

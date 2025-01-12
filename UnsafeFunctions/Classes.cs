@@ -3,14 +3,23 @@ using System.Diagnostics;
 
 namespace UnsafeFunctions;
 
+/// <summary>
+/// Интервал для арифметического кодирования
+/// (подробнее см. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов).
+/// </summary>
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
 [DebuggerDisplay("({Lower}, {Length} : {Base})")]
 public readonly struct Interval : IEquatable<Interval>
 {
+	/// <summary>См. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов.</summary>
 	public uint Lower { get; init; }
+	/// <summary>См. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов.</summary>
 	public uint Length { get; init; }
+	/// <summary>См. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов.</summary>
 	public uint Base { get; init; }
 
+	/// <summary>Создает интервал только из нижней границы и основания, с длиной, равной 1.</summary>
+	/// <exception cref="ArgumentException"></exception>
 	public Interval(uint lower, uint @base)
 	{
 		if (@base == 0)
@@ -22,6 +31,8 @@ public readonly struct Interval : IEquatable<Interval>
 		Base = @base;
 	}
 
+	/// <summary>Создает интервал из нижней границы, длины и основания.</summary>
+	/// <exception cref="ArgumentException"></exception>
 	public Interval(uint lower, uint length, uint @base)
 	{
 		if (@base == 0)
@@ -33,17 +44,17 @@ public readonly struct Interval : IEquatable<Interval>
 		Base = @base;
 	}
 
+	/// <summary>Создает интервал из другого интервала.</summary>
 	public Interval(Interval other) : this(other.Lower, other.Length, other.Base)
 	{
 	}
 
+	/// <summary>Вырожденный интервал, никак не влияющий на вЫходной поток.</summary>
 	public static Interval Default => new(0, 1);
 
 	public override bool Equals(object? obj)
 	{
-		if (obj == null)
-			return false;
-		if (obj is not Interval m)
+		if (obj == null || obj is not Interval m)
 			return false;
 		return Lower == m.Lower && Length == m.Length && Base == m.Base;
 	}
@@ -57,6 +68,12 @@ public readonly struct Interval : IEquatable<Interval>
 	public static bool operator !=(Interval x, Interval y) => !(x == y);
 }
 
+/// <summary>
+/// Короткий список интервалов, занимающий меньше памяти, чем полноценные
+/// <see cref="List{T}">List</see>&lt;<see cref="Interval"/>&gt; или
+/// <see cref="NList{T}">NList</see>&lt;<see cref="Interval"/>&gt;, но поддерживающий и намного меньше методов
+/// (в качестве альтернативы можно использовать экстенты).
+/// </summary>
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
 [DebuggerDisplay("Length = {Length}")]
 public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
@@ -65,8 +82,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 	private static readonly int lengthOffset = sizeof(Interval) * partSize + sizeof(Interval*);
 	private readonly Interval* items = (Interval*)Marshal.AllocHGlobal(lengthOffset + 1);
 
+	/// <summary>Создает список нулевой длины.</summary>
 	public ShortIntervalList() => FillMemory((byte*)items, lengthOffset + 1, 0);
 
+	/// <summary>Создает список из последовательности <see cref="IEnumerable"/>&lt;<see cref="Interval"/>&gt;.</summary>
 	public ShortIntervalList(G.IEnumerable<Interval> collection)
 	{
 		FillMemory((byte*)items, lengthOffset + 1, 0);
@@ -89,6 +108,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		}
 	}
 
+	/// <summary>
+	/// Adds an item to the <see cref="G.ICollection{T}"/>.
+	/// </summary>
+	/// <param name="item">The object to add to the <see cref="G.ICollection{T}"/>.</param>
 	public ShortIntervalList Add(Interval item)
 	{
 		SetInternal(Length++, item);
@@ -133,6 +156,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		GC.SuppressFinalize(this);
 	}
 
+	/// <summary>
+	/// Returns an enumerator that iterates through the collection.
+	/// </summary>
+	/// <returns>An enumerator that can be used to iterate through the collection.</returns>
 	public readonly Enumerator GetEnumerator() => new(this);
 
 	readonly G.IEnumerator<Interval> G.IEnumerable<Interval>.GetEnumerator() => GetEnumerator();
@@ -162,8 +189,6 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		return -1;
 	}
 
-	readonly int G.IList<Interval>.IndexOf(Interval item) => IndexOf(item);
-
 	public void Insert(int index, Interval item)
 	{
 		if (index < 0 || index > Length)
@@ -179,8 +204,11 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		Length++;
 	}
 
-	void G.IList<Interval>.Insert(int index, Interval item) => Insert(index, item);
-
+	/// <summary>
+	/// Removes the <see cref="G.IList{T}"/> item at the specified index.
+	/// </summary>
+	/// <param name="index">The zero-based index of the item to remove.</param>
+	/// <exception cref="ArgumentOutOfRangeException"></exception>
 	public ShortIntervalList RemoveAt(int index)
 	{
 		if (index < 0 || index >= Length)
@@ -194,6 +222,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 
 	void G.IList<Interval>.RemoveAt(int index) => RemoveAt(index);
 
+	/// <summary>
+	/// Removes the <see cref="G.IList{T}"/> item by its value;
+	/// </summary>
+	/// <param name="item">The object to remove from the <see cref="G.ICollection{T}"/>.</param>
 	public bool RemoveValue(Interval item)
 	{
 		var index = IndexOf(item);
@@ -202,6 +234,11 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		return index >= 0;
 	}
 
+	/// <summary>
+	/// Sets the element at the specified index.
+	/// </summary>
+	/// <param name="index">The zero-based index of the element to get or set.</param>
+	/// <param name="item">The element to set at the specified index.</param>
 	public readonly ShortIntervalList Set(Index index, Interval item)
 	{
 		this[index] = item;
@@ -221,6 +258,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		}
 	}
 
+	/// <summary>
+	/// Copies the elements of the <see cref="ShortIntervalList"/> to a new array.
+	/// </summary>
+	/// <returns>An array containing copies of the elements of the <see cref="ShortIntervalList"/>.</returns>
 	public readonly Interval[] ToArray()
 	{
 		var array = new Interval[Length];
@@ -228,6 +269,10 @@ public unsafe struct ShortIntervalList : IDisposable, IList<Interval>
 		return array;
 	}
 
+	/// <summary>
+	/// Copies the elements of the <see cref="ShortIntervalList"/> to a new array.
+	/// </summary>
+	/// <param name="list">An array containing copies of the elements of the <see cref="ShortIntervalList"/></param>
 	public struct Enumerator(ShortIntervalList list) : G.IEnumerator<Interval>
 	{
 		private byte _index;

@@ -16,6 +16,11 @@ namespace AresGlobalMethods;
 
 public static class Global
 {
+	/// <summary>
+	/// Преобразует двумерный список интервалов в байты
+	/// (см. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов, пункт "двойной список").
+	/// </summary>
+	/// <param name="tn">Номер потока (см. <see cref="Threads"/>).</param>
 	public static NList<byte> WorkUpDoubleList(NList<ShortIntervalList> input, int tn)
 	{
 		if (input.Length == 0)
@@ -39,6 +44,11 @@ public static class Global
 		return bytes;
 	}
 
+	/// <summary>
+	/// Преобразует трехмерный список интервалов в байты
+	/// (см. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов, пункт "двойной список").
+	/// </summary>
+	/// <param name="tn">Номер потока (см. <see cref="Threads"/>).</param>
 	public static NList<byte> WorkUpTripleList(List<NList<ShortIntervalList>> input, int tn)
 	{
 		if (input.Any(x => x.Length == 0))
@@ -65,6 +75,7 @@ public static class Global
 		return bytes;
 	}
 
+	/// <summary>См. ReadNumber() в файле DecodingExtents.cs в проекте AresGlobalDecoding.</summary>
 	public static void WriteCount(this ArithmeticEncoder ar, uint originalBase)
 	{
 		var t = Max(BitsCount(originalBase) - 1, 0);
@@ -74,7 +85,15 @@ public static class Global
 	}
 }
 
-public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> result, int tn)
+/// <summary>
+/// Класс, выполняющий сжатие методом Хаффмана
+/// (см. <a href="https://github.com/Etyuhibosecyu/AresTools">здесь</a>, ниже списка файлов).<br/>
+/// Использование: <tt>new Huffman(input, result, TN).Encode();</tt>.<br/>
+/// </summary>
+/// <param name="Input">Входной поток для сжатия.</param>
+/// <param name="Result">В<u>ы</u>ходной поток для сжатых данных.</param>
+/// <param name="TN">Номер потока (см. <see cref="Threads"/>).</param>
+public record class Huffman(NList<ShortIntervalList> Input, NList<ShortIntervalList> Result, int TN)
 {
 	private bool lz, lzDummy, spaces, consequentElems;
 	private int bwtIndex, lzIndex, lzDummyIndex, bwtLength, lzHeaderLength, startPos, lzPos, maxFrequency;
@@ -82,39 +101,40 @@ public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> re
 	private NList<int> indexCodes = default!, frequency = default!;
 	private NList<(int elem, int freq)> frequencyTable = default!;
 
+	/// <summary>Основной метод класса. Инструкция по применению - см. в описании класса.</summary>
 	public NList<ShortIntervalList> Encode()
 	{
-		if (input.Length == 0)
+		if (Input.Length == 0)
 			throw new EncoderFallbackException();
-		bwtIndex = input[0].IndexOf(BWTApplied);
-		if (CreateVar(input[0].IndexOf(HuffmanApplied), out var huffmanIndex) != -1 && (bwtIndex == -1 || huffmanIndex != bwtIndex + 1))
-			return input;
+		bwtIndex = Input[0].IndexOf(BWTApplied);
+		if (CreateVar(Input[0].IndexOf(HuffmanApplied), out var huffmanIndex) != -1 && (bwtIndex == -1 || huffmanIndex != bwtIndex + 1))
+			return Input;
 		Prerequisites();
-		if (input.Length < startPos + 2)
-			return input;
-		spaces = input[0].Length >= 2 && input[0][1] == SpacesApplied;
-		Status[tn] = 0;
-		StatusMaximum[tn] = 7;
-		ProcessGroups(input, tn);
+		if (Input.Length < startPos + 2)
+			return Input;
+		spaces = Input[0].Length >= 2 && Input[0][1] == SpacesApplied;
+		Status[TN] = 0;
+		StatusMaximum[TN] = 7;
+		ProcessGroups(Input, TN);
 		frequency = frequencyTable.PNConvert(x => x.freq);
-		Status[tn]++;
+		Status[TN]++;
 		ProcessArithmeticMaps();
-		Status[tn]++;
+		Status[TN]++;
 		NList<Interval> c = [];
-		c.WriteCount((uint)maxFrequency - 1);
-		c.WriteCount((uint)frequencyTable.Length - 1);
-		Status[tn] = 0;
-		StatusMaximum[tn] = frequencyTable.Length;
-		Current[tn] += ProgressBarStep;
+		c.WriteNumber((uint)maxFrequency - 1);
+		c.WriteNumber((uint)frequencyTable.Length - 1);
+		Status[TN] = 0;
+		StatusMaximum[TN] = frequencyTable.Length;
+		Current[TN] += ProgressBarStep;
 		if (consequentElems)
-			for (var i = 0; i < frequencyTable.Length; i++, Status[tn]++)
+			for (var i = 0; i < frequencyTable.Length; i++, Status[TN]++)
 			{
 				c.Add(uniqueList[frequencyTable[i].elem]);
 				if (i != 0)
 					c.Add(new((uint)frequency[i] - 1, (uint)frequency[i - 1]));
 			}
 		else
-			for (var i = 0; i < frequencyTable.Length; i++, Status[tn]++)
+			for (var i = 0; i < frequencyTable.Length; i++, Status[TN]++)
 				c.Add(new(frequency[i] >= 1 ? (uint)frequency[i] - 1 : throw new EncoderFallbackException(), (uint)maxFrequency));
 		uniqueList.Dispose();
 		frequencyTable.Dispose();
@@ -122,31 +142,31 @@ public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> re
 		var cSplit = c.SplitIntoEqual(8);
 		c.Dispose();
 		var cLength = (uint)cSplit.Length;
-		var insertIndex = lz ? lzIndex : lzDummy ? lzDummyIndex : result[0].Length;
-		result[0].Insert(insertIndex, HuffmanApplied);
-		result[0].Insert(insertIndex + 1, new(0, cLength, cLength));
-		result.Insert(startPos - bwtLength, cSplit.PConvert(x => new ShortIntervalList(x)));
+		var insertIndex = lz ? lzIndex : lzDummy ? lzDummyIndex : Result[0].Length;
+		Result[0].Insert(insertIndex, HuffmanApplied);
+		Result[0].Insert(insertIndex + 1, new(0, cLength, cLength));
+		Result.Insert(startPos - bwtLength, cSplit.PConvert(x => new ShortIntervalList(x)));
 		cSplit.Dispose();
-		return result;
+		return Result;
 	}
 
 	private void Prerequisites()
 	{
-		Current[tn] = 0;
-		CurrentMaximum[tn] = ProgressBarStep * 2;
-		result.Replace(input);
-		result[0] = new(result[0]);
-		lz = (lzIndex = input[0].IndexOf(LempelZivApplied)) != -1 && (bwtIndex == -1 || lzIndex != bwtIndex + 1);
-		lzDummyIndex = input[0].IndexOf(LempelZivDummyApplied);
+		Current[TN] = 0;
+		CurrentMaximum[TN] = ProgressBarStep * 2;
+		Result.Replace(Input);
+		Result[0] = new(Result[0]);
+		lz = (lzIndex = Input[0].IndexOf(LempelZivApplied)) != -1 && (bwtIndex == -1 || lzIndex != bwtIndex + 1);
+		lzDummyIndex = Input[0].IndexOf(LempelZivDummyApplied);
 		lzDummy = lzDummyIndex != -1 && (bwtIndex == -1 || lzDummyIndex != bwtIndex + 1);
-		bwtLength = bwtIndex != -1 ? (int)input[0][bwtIndex + 1].Base : 0;
+		bwtLength = bwtIndex != -1 ? (int)Input[0][bwtIndex + 1].Base : 0;
 		if (!lz && !lzDummy)
 			lzHeaderLength = 1;
-		else if (input[0].Length >= lzIndex + 2 && input[0][lzIndex + 1] == LempelZivSubdivided)
+		else if (Input[0].Length >= lzIndex + 2 && Input[0][lzIndex + 1] == LempelZivSubdivided)
 			lzHeaderLength = 3;
 		else
 			lzHeaderLength = 2;
-		startPos = lzHeaderLength + (input[0].Length >= 1 && input[0][0] == LengthsApplied ? (int)input[0][1].Base : 0) + bwtLength;
+		startPos = lzHeaderLength + (Input[0].Length >= 1 && Input[0][0] == LengthsApplied ? (int)Input[0][1].Base : 0) + bwtLength;
 		lzPos = bwtIndex != -1 ? 4 : 2;
 	}
 
@@ -176,22 +196,22 @@ public class Huffman(NList<ShortIntervalList> input, NList<ShortIntervalList> re
 	{
 		var intervalsBase = (uint)frequency.Sum();
 		using var arithmeticMap = GetArithmeticMap(frequency);
-		Status[tn]++;
+		Status[TN]++;
 		if (lz)
 			intervalsBase = GetBaseWithBuffer(arithmeticMap[^1], spaces);
 		using var frequencyIntervals = arithmeticMap.Prepend(0u).GetROLSlice(0, arithmeticMap.Length).ToNList((x, index) => new Interval(x, (uint)frequency[index], intervalsBase));
-		Status[tn]++;
+		Status[TN]++;
 		Interval lzInterval = lz ? new(arithmeticMap[^1], intervalsBase - arithmeticMap[^1], intervalsBase) : new();
-		Status[tn] = 0;
-		StatusMaximum[tn] = input.Length - startPos;
-		Current[tn] += ProgressBarStep;
-		Parallel.For(startPos, input.Length, i =>
+		Status[TN] = 0;
+		StatusMaximum[TN] = Input.Length - startPos;
+		Current[TN] += ProgressBarStep;
+		Parallel.For(startPos, Input.Length, i =>
 		{
-			if (lz && i >= startPos + lzPos && result[i][0].Lower + result[i][0].Length == result[i][0].Base)
-				result[i] = new(result[i]) { [0] = lzInterval };
+			if (lz && i >= startPos + lzPos && Result[i][0].Lower + Result[i][0].Length == Result[i][0].Base)
+				Result[i] = new(Result[i]) { [0] = lzInterval };
 			else
-				result[i] = new(result[i]) { [0] = i >= startPos + lzPos ? frequencyIntervals[indexCodes[i - startPos]] : new(frequencyIntervals[indexCodes[i - startPos]]) { Base = arithmeticMap[^1] } };
-			Status[tn]++;
+				Result[i] = new(Result[i]) { [0] = i >= startPos + lzPos ? frequencyIntervals[indexCodes[i - startPos]] : new(frequencyIntervals[indexCodes[i - startPos]]) { Base = arithmeticMap[^1] } };
+			Status[TN]++;
 		});
 		indexCodes.Dispose();
 	}
